@@ -1,0 +1,427 @@
+---
+title: "sgRNA Library Pre-Cleaning Script"
+author: "Author: Stefanus Bernard"
+date: "Date: `r format(Sys.time(), '%d %B %Y')`"
+output: 
+  html_document :
+    theme : cerulean
+    toc : true
+    toc_float : true
+    number_section : true
+---
+
+# Important Notes
+
+## Hypothesis
+
+CRISPR screen library often has discrepancy of gene name with the updated HGNC dataset
+
+## Objective
+
+Correcting the gene name of CRISPR screen library
+
+## Materials and Methods
+
+### Materials
+
+1.  CRISPR screen library
+2.  HGNC dataset
+
+### Methods
+
+1.  Import HGNC dataset
+2.  Import sgRNA CRISPR library
+3.  Correction of sgRNA library
+
+# Experiment
+
+## Import required packages
+
+```{r}
+library(hgnc)
+library(tidyverse)
+library(naniar)
+```
+
+## Import sgRNA CRISPR library and define control sgRNA (user input)
+
+```{r}
+sgRNA_library_selected <- 'Cellecta'
+sgRNA_library <- read_csv(paste('./raw_data/', sgRNA_library_selected, '.csv', sep = ''))
+
+# should be user input later
+control_sgrna <- c('Neg_Control', 'INTRON_CTRL')
+```
+
+length(unique(sgRNA_library_ori\$gene)) *19,013 genes originally detected*
+
+## Import HGNC dataset
+
+```{r}
+hgnc <- import_hgnc_dataset()
+
+hgnc_selected <- hgnc %>%
+  select(symbol, prev_symbol, alias_symbol, location_sortable)
+
+hgnc_selected
+
+```
+
+## Check how many missing genes
+
+Crosscheck_genes is only the 2x2 table to show TRUE or FALSE
+
+```{r}
+
+`%notin%` <- Negate(`%in%`)
+
+crosscheck_genes <- sgRNA_library %>%
+  filter(gene %notin% control_sgrna)
+
+crosscheck_genes <- data.frame(genes_in_hgnc = unique(crosscheck_genes$gene) %in% unique(hgnc_selected$symbol))
+crosscheck_genes <- crosscheck_genes %>%
+  count(genes_in_hgnc) %>%
+  dplyr::rename('how_many' = 'n')
+
+ggplot(crosscheck_genes, aes(genes_in_hgnc, how_many)) +
+  geom_histogram(stat = 'identity') +
+  labs(
+    title = paste('Number of discrepancy between', sgRNA_library_selected, 'sgRNA library and gene annotation from HGNC'),
+    x = '',
+    y = 'Number of genes'
+  ) +
+  geom_text(aes(label = how_many), vjust=-0.5) +
+  scale_x_discrete(labels=c('TRUE' = 'match with HGNC data',
+                            'FALSE' = 'missing gene \n(unmatched with HGNC data)')) +
+  theme_light()
+
+```
+
+## Fetch missing genes
+
+```{r}
+
+missing_genes <- sgRNA_library %>%
+  filter(gene %notin% hgnc_selected$symbol) %>%
+  filter(gene %notin% control_sgrna)
+  
+```
+
+## Separate original library/crosschecked genes with missing genes
+
+```{r}
+
+sgRNA_library <- sgRNA_library %>%
+  filter(gene %notin% missing_genes$gene)
+
+paste(length(unique(sgRNA_library$gene)), 'genes left after separation of sgRNA library data from missing genes')
+
+```
+
+## Find the missing genes by crosschecking with HGNC data
+
+```{r}
+
+find_missing_genes <- data.frame(missing_gene_name = unique(missing_genes$gene))
+
+find_missing_genes <- find_missing_genes %>%
+  mutate(hgnc_current_gene_name = sapply(missing_gene_name, 
+                                         function(gene) {
+                                           match_index <- which(sapply(hgnc_selected$prev_symbol, function(symbol_list) gene %in% symbol_list))
+                                           if (length(match_index) == 0) {
+                                             match_index <- which(sapply(hgnc_selected$alias_symbol,
+                                                                         function(symbol_list) gene %in% symbol_list))}
+                                           if (length(match_index) == 1) {
+                                             hgnc_selected$symbol[match_index][1]
+                                           }
+                                           else if (length(match_index) > 1){
+                                               hgnc_selected$symbol[match_index]
+                                           }
+                                           else {
+                                             NA
+                                           }
+                                           }))
+
+
+# special genes is those gene with more than one approved symbol
+special_genes <- find_missing_genes %>%
+  filter(sapply(hgnc_current_gene_name, length) > 1)
+
+# separate find_missing_genes from the gene with more than one approved symbol
+find_missing_genes <- find_missing_genes %>%
+  mutate(hgnc_current_gene_name = sapply(hgnc_current_gene_name, function(x) {
+    if (length(x) > 1) {
+      return(NA)
+    } else {
+      return(x)
+    }
+  }))
+  
+paste('how many genes missing:' , length(unique(find_missing_genes$missing_gene_name)))
+# how many genes missing: 1463
+
+paste('how many genes successfully crossmatched with HGNC data:', length(unique(find_missing_genes$hgnc_current_gene_name)))
+# how many genes successfully crossmatched with HGNC data: 1343
+
+
+# create a dataframe to check how many genes successfully match with HGNC data and those that are still missing
+find_missing_gene_df <- data.frame(failed_crosscheck = is.na(find_missing_genes$hgnc_current_gene_name))
+find_missing_gene_df <- find_missing_gene_df %>%
+  count(failed_crosscheck) %>%
+  dplyr::rename('how_many_genes' = 'n')
+
+
+# plot how many data successfully crossmatched (excluding the special genes and missing genes after crossmatching)
+ggplot(find_missing_gene_df, aes(failed_crosscheck, how_many_genes)) +
+  geom_histogram(stat = 'identity') +
+  labs(
+    title = paste('Comparison between missing genes and successfully annotated gene from HGNC'),
+    x = '',
+    y = 'Number of genes'
+  ) +
+  geom_text(aes(label = how_many_genes), vjust=-0.5) +
+  scale_x_discrete(labels=c('TRUE' = 'missing gene \n(unmatched with HGNC data)',
+                            'FALSE' = 'gene match with HGNC data')) +
+  theme_light()
+
+```
+
+## Detect any duplicated genes
+
+```{r}
+
+duplicated_genes <- find_missing_genes %>%
+  count(hgnc_current_gene_name) %>%
+  filter(n > 1) %>%
+  dplyr::rename('num_genes' = 'n')
+
+duplicated_genes_df <- find_missing_genes %>%
+  filter(hgnc_current_gene_name %in% duplicated_genes$hgnc_current_gene_name,
+         !is.na(hgnc_current_gene_name))
+
+```
+
+## Separate genes that failed during crosschecking and those successfully crosschecked
+
+```{r}
+
+# separate genes that failed crosschecking with HGNC dataset
+genes_unknown <- find_missing_genes %>%
+  filter(is.na(hgnc_current_gene_name))
+
+# rename the missing_gene_name column to 'gene' to match the missing_genes dataframe
+find_missing_genes <- find_missing_genes %>%
+  dplyr::rename('gene' = 'missing_gene_name')
+
+```
+
+## Analysis of unknown genes
+
+```{r}
+
+genes_unknown <- genes_unknown %>%
+  mutate(notes = case_when(missing_gene_name %in% special_genes$missing_gene_name ~ 'ambiguous annotation',
+                str_detect(missing_gene_name, 'LOC') ~ 'uncharacterized gene',
+                str_detect(missing_gene_name, '-') ~ 'possibly targeting two genes',
+                TRUE ~ 'unknown'))
+
+count_genes_unknown <- genes_unknown %>%
+  count(notes) %>%
+  dplyr::rename('number_of_genes' = 'n')
+
+ggplot(count_genes_unknown, aes(notes, number_of_genes)) +
+  geom_histogram(stat = 'identity') +
+  labs(
+    title = paste('Further Analysis of Missing Genes'),
+    x = '',
+    y = 'Number of genes'
+  ) +
+  geom_text(aes(label = number_of_genes), vjust=-0.5) +
+  scale_x_discrete(labels=c('TRUE' = 'missing gene \n(unmatched with HGNC data)',
+                            'FALSE' = 'gene match with HGNC data')) +
+  theme_light()
+
+```
+
+## Map separated data and replace sgRNA gene name with the recent HGNC version gene name
+
+```{r}
+
+# left join the find_missing_genes with missing_genes data
+missing_genes <- missing_genes %>%
+  left_join(find_missing_genes, by = join_by('gene')) %>%
+  mutate(new_sgrna = str_replace(sgRNA, "(?<=sg)([A-Za-z0-9-]+)", hgnc_current_gene_name))
+
+paste('number of genes in missing_genes:', length(unique(missing_genes$gene)))
+# number of genes in missing_genes: 1463
+
+final_corrected_missing_genes <- missing_genes %>%
+  mutate(hgnc_current_gene_name = dplyr::coalesce(hgnc_current_gene_name, gene),
+         new_sgrna = dplyr::coalesce(new_sgrna, sgRNA)) %>%
+  select(new_sgrna, hgnc_current_gene_name, spacer) %>%
+  dplyr::rename('sgRNA' = 'new_sgrna',
+                'gene' = 'hgnc_current_gene_name')
+
+paste('number of genes in final_corrected_missing_genes:', length(unique(final_corrected_missing_genes$gene)))
+# number of genes in final_corrected_missing_genes: 1451
+
+
+# sgrna <- 'sgAARS1_1'
+# paste(str_extract(sgrna, "(?<=sg)([A-Za-z0-9-]+)"), sep = '_')
+  
+```
+
+## Combine the dataframe of crosschecked genes with original dataframe
+
+```{r}
+
+length(unique(final_corrected_missing_genes$gene))
+# 1451 genes
+length(unique(sgRNA_library$gene))
+# 17550 genes
+
+sgRNA_library_final <- sgRNA_library %>%
+  full_join(final_corrected_missing_genes)
+
+length(unique(sgRNA_library_final$gene))
+# 18933 genes
+
+# 19013 - 18929 = 80 genes lost
+
+# check how many count genes in final dataframe
+count_gene_final <- sgRNA_library_final %>%
+  count(gene) %>%
+  filter(n < 80) %>%
+  dplyr::rename('sgrna_num' = 'n')
+
+```
+
+## Plot comparison before and after the cleaning
+
+```{r}
+# how many NA in gene column
+sum(is.na(sgRNA_library_final$gene))
+
+# how many NA in sgRNA column
+sum(is.na(sgRNA_library_final$sgRNA))
+
+# any missing genes left ? cross-compare with HGNC dataset
+length(unique(sgRNA_library_final$gene))
+# 18933 genes
+
+# create dataframe for final_check_count; compare with crosscheck_genes
+
+final_check_count <- data.frame(genes_name = unique(sgRNA_library_final$gene),
+                                genes_in_hgnc = unique(sgRNA_library_final$gene) %in% unique(hgnc$symbol))
+
+# exclude control sgRNA
+
+final_check_count <- final_check_count %>%
+  filter(genes_name %notin% control_sgrna) %>%
+  count(genes_in_hgnc) %>%
+  dplyr::rename('how_many' = 'n')
+
+# combine crosscheck_genes and final_check_count
+
+crosscheck_genes$genes_in_hgnc = ifelse(crosscheck_genes$genes_in_hgnc, 'match hgnc', 'missing')
+crosscheck_genes$group = 'before correction'
+  
+final_check_count$genes_in_hgnc = ifelse(final_check_count$genes_in_hgnc, 'match hgnc', 'missing')
+final_check_count$group = 'after correction'
+
+correction_table <- crosscheck_genes %>%
+  full_join(final_check_count)
+
+correction_table$group = factor(correction_table$group, levels = c('before correction', 'after correction'), ordered = TRUE)
+
+ggplot(correction_table, aes(x = group, y = how_many, fill = genes_in_hgnc)) +
+  geom_col(color = 'white') +
+  labs(
+    title = paste('Before-After Correction of Gene Symbols'),
+    x = '',
+    y = 'Number of genes') +
+  geom_text(aes(label = how_many), vjust=-0.5) +
+  theme_light() +
+  scale_fill_manual(values=c('lightgreen', 'red'))
+
+
+```
+
+## Separate duplicated sgRNA and genes from final library
+
+```{r}
+
+# separate sgRNA library duplicated, and sort it based on the gene column
+sgRNA_library_duplicated <- sgRNA_library_final %>%
+  filter(gene %in% count_gene_final$gene) %>%
+  arrange(gene)
+
+# count the length of each gene and create sequential number
+run_length <- rle(sgRNA_library_duplicated$gene)$lengths
+sequential_numbers <- sequence(run_length)
+
+sgRNA_library_duplicated <- sgRNA_library_duplicated %>%
+  mutate(new_sgrna = paste('sg', gene, '_', sequential_numbers, sep = '')) %>%
+  select(-sgRNA) %>%
+  dplyr::rename('sgRNA' = 'new_sgrna') %>%
+  dplyr::relocate(sgRNA, .before = gene)
+
+```
+
+## Combine the processed duplicated sgRNA back into the sgRNA_library_final
+
+```{r}
+
+sgRNA_library_min_duplicate <- sgRNA_library_final %>%
+  filter(gene %notin% sgRNA_library_duplicated$gene)
+
+sgRNA_library_export <- sgRNA_library_min_duplicate %>%
+  full_join(sgRNA_library_duplicated)
+
+```
+
+## Show any genes targeted more than 8 sgRNAs
+
+```{r}
+
+sgrna_gene_duplicated <- sgRNA_library_export %>%
+  count(gene) %>%
+  dplyr::rename('sgrna_num' = 'n') %>%
+  filter(sgrna_num > 8 & gene %notin% control_sgrna) %>%
+  arrange(sgrna_num)
+
+ggplot(sgrna_gene_duplicated, aes(gene, sgrna_num)) +
+  geom_histogram(stat = 'identity') +
+  labs(
+    title = 'Genes targeted more than 8 sgRNAs',
+    x = '',
+    y = 'Number of sgRNA'
+  ) +
+  geom_text(aes(label = sgrna_num), vjust = -0.5) +
+  theme(axis.text.x = element_text(vjust = 0.5, hjust = 0.5, angle = 45))
+
+```
+
+## Check for the final time for any duplicated sgRNA and gene in sgRNA_library_export
+
+```{r}
+
+paste('total unique sgRNA: ', length(unique(sgRNA_library_export$sgRNA)))
+# total unique sgRNA:  150076
+
+paste('total unique gene: ', length(unique(sgRNA_library_export$gene)))
+# total unique gene: 18933
+
+```
+
+## Export corrected sgRNA library
+
+```{r}
+
+write_csv(sgRNA_library_export, file = paste('./object_intermediate/', sgRNA_library_selected, '_precleaning.csv', sep = ''))
+
+```
+
+# Result
+
+# Conclusion

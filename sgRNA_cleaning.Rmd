@@ -1,0 +1,1019 @@
+---
+title: "sgRNA Library Cleaning Script"
+author: "Author: Stefanus Bernard; small adaptation from Barbara & Ryan (2019)"
+date: "Date: `r format(Sys.time(), '%d %B %Y')`"
+output: 
+  html_document :
+    theme : cerulean
+    toc : true
+    toc_float : true
+    number_section : true
+---
+
+# Important Notes
+
+## Hypothesis
+
+Some sgRNA are either multi-target or off-target activity
+
+## Objective
+
+Clean sgRNA library from sgRNA with off-target activity
+
+## Materials and Methods
+
+### Materials
+
+1.  sgRNA library Cellecta 150K
+2.  Human genome GRCh38 indexed in bowtie
+3.  Laptop connected to internet
+
+### Methods
+
+1.  Import required packages
+2.  Define any filename
+3.  Import sgRNA library and create dir for output (output_cleaning) and intermediate files (object_intermediate)
+4.  Alignment of sgRNA to HG38 UCSC using Bowtie2 (2 mismatches)
+5.  Post alignment data processing
+6.  Find and drop multi-target sgRNAs
+7.  Find and drop single mismatch sgRNAs
+8.  Find and drop sgRNA align with double mismatches at the PAM distal nucleotides
+9.  CCDS annotation of sgRNA library
+10. HGNC annotation of sgRNA library
+11. Clean sgRNA library
+12. Discard any genes targeted by less than 3 sgRNAs
+
+# Experiment
+
+## Import required packages
+
+```         
+# import crisprVerse library
+library(crisprBase)
+library(crisprBowtie)
+
+# import human genome annotation GRCh38
+library(BSgenome.Hsapiens.UCSC.hg38)
+
+# import granges
+library(GenomicRanges)
+
+# import hgnc library
+library(hgnc)
+
+# import data processing and tidyverse related package
+library(stringr)
+library(directlabels)
+library(tidyverse)
+library(knitr)
+```
+
+**install if package is not available yet**
+
+```{r install required packages, include = FALSE}
+setwd(getwd())
+
+
+list_packages_bioconductor <- c('crisprBase',
+                                'crisprBowtie',
+                                'BSgenome.Hsapiens.UCSC.hg38',
+                                'GenomicRanges')
+
+for (i in list_packages_bioconductor) {
+  BiocManager::install(i)
+  
+}
+
+
+list_packages <- c('hgnc',
+                   'stringr',
+                   'directlabels',
+                   'tidyverse',
+                   'knitr')
+
+new_packages <- list_packages[!(list_packages %in% installed.packages()[,"Package"])]
+if(length(new_packages)) install.packages(new_packages)
+
+```
+
+```{r Import required library, include=FALSE}
+
+library(crisprBase)
+library(crisprBowtie)
+library(BSgenome.Hsapiens.UCSC.hg38)
+library(GenomicRanges)
+library(hgnc)
+library(stringr)
+library(directlabels)
+library(tidyverse)
+library(knitr)
+library(xlsx)
+
+```
+
+## Define any filename
+
+```{r Define any filename}
+
+sgRNA_library_selected <- 'M3_preprocessed_precleaning'
+aln_2_mismatch_filename <- paste(sgRNA_library_selected, '_aln.csv', sep ='')
+
+paste('sgRNA library name:', sgRNA_library_selected)
+paste('Alignmment with 2 mismatch filename (csv format):', aln_2_mismatch_filename)
+
+```
+
+## Import sgRNA library and create directory for output_cleaning and intermediate files
+
+```         
+dir.create('output_cleaning')
+sgRNA_library_selected <- 'Cellecta'
+sgRNA_library_raw <- read_csv(paste('./raw_data/', sgRNA_library_selected, '.csv', sep = ''))
+head(sgRNA_library)
+```
+
+```{r Create folder and import library cellecta, include=FALSE}
+dir.create('output_cleaning')
+dir.create('object_intermediate')
+sgRNA_library_raw <- read_csv(paste('./object_intermediate/', sgRNA_library_selected, '.csv', sep = ''))
+```
+
+## Separate control library from original library
+
+```{r Separate control library from original library}
+
+`%notin%` <- negate(`%in%`)
+
+control <- c('Neg_Control',
+             'INTRON_CTRL')
+
+sgRNA_library <- sgRNA_library_raw %>%
+  filter(gene %notin% control)
+
+sgRNA_library_control <- sgRNA_library_raw %>%
+  filter(gene %in% control)
+
+```
+
+## Export control sgRNA library into a file
+
+```{r Write csv file of control sgRNA}
+
+write_csv(sgRNA_library_control, file = paste('./object_intermediate/', sgRNA_library_selected, '_control.csv', sep = ''))
+
+```
+
+## Check the sgRNA library
+
+```{r}
+
+head(sgRNA_library)
+
+```
+
+## Alignment of sgRNA to HG38 UCSC using Bowtie (2 mismatch)
+
+**Checking for HG38 index files**
+
+```{r Check for HG38 index files}
+
+list.files(path = 'bowtie_index/', pattern = '*.ebwt$')
+
+check_index_file = 'hg38.1.ebwt'
+file_test('-f', paste('bowtie_index/', check_index_file, sep='')) # returns TRUE
+
+```
+
+```{r Indexing HG38 if indexing have not been done previously}
+if (file_test('-f', paste('bowtie_index/', check_index_file, sep='')) == FALSE) {
+  bowtie_build(fastaFile,
+               outdir="./bowtie2_index",
+               force=TRUE,
+               prefix='hg38')
+} else {
+  print(paste(check_index_file, 'is in bowtie_index directory, indicating HG38 indexing by bowtie have been done previously'))
+}
+```
+
+**Checking whether the alignment has been done**
+
+```{r Check whether alignment has been done}
+
+if (file_test('-f', paste('./object_intermediate/', aln_2_mismatch_filename, sep = '')) == FALSE) {
+      data(SpCas9, package="crisprBase")
+      crisprNuclease <- SpCas9
+      
+      spacers_sequence <- c(unique(sgRNA_library$spacer))
+      
+      bowtie_index <- file.path('./bowtie_index', 'hg38')
+      
+      # change which spacer would like to be used cellecta or avana
+      scoring_alignment <- runCrisprBowtie(spacers_sequence,
+                                           mode = 'spacer',
+                                           bsgenome = BSgenome.Hsapiens.UCSC.hg38,
+                                           crisprNuclease = crisprNuclease,
+                                           n_mismatches = 2,
+                                           canonical = TRUE,
+                                           bowtie_index = bowtie_index)
+      
+      scoring_data <- sgRNA_library %>%
+        left_join(scoring_alignment, by = join_by(spacer))
+      
+      write.csv(scoring_data, 
+                file = paste('./object_intermediate/', aln_2_mismatch_filename, sep = ''), 
+                row.names = FALSE)
+  
+} else {
+  paste(aln_2_mismatch_filename, 'file is in object_intermediate folder, this indicates the alignment with max 2 mismatches has been conducted previously')
+}
+
+```
+
+## Post alignment data processing
+
+**Import CSV file of alignment with 2 mismatches**
+
+```{r import csv file from the alignment, echo = FALSE}
+
+library_alignment <- read_csv(paste('./object_intermediate/', aln_2_mismatch_filename, sep = ''))
+sgRNA_beginning <- length(unique(library_alignment$sgRNA))
+
+```
+
+**Create dataframe to count number of sgRNA, number of alignments, and notes**
+
+```{r, echo = FALSE}
+
+count_sgrna <- c()
+num_genes <- c()
+num_alignments <- c()
+notes <- c()
+
+count_sgrna <- append(count_sgrna, length(unique(library_alignment$sgRNA)))
+num_genes <- append(num_genes, length(unique(library_alignment$gene)))
+num_alignments <- append(num_alignments, length(library_alignment$sgRNA))
+notes <- append(notes, 'beginning')
+
+df_count <- data.frame(count_sgrna, num_genes, num_alignments, notes)
+
+```
+
+[**Updating df_count**]{style="color:red"}
+
+```{r}
+
+kable(df_count)
+
+```
+
+**Select only Chr 1:22 and X,Y**
+
+```{r Select only valid chromosome}
+
+list_chromosome <- paste0('chr', c(1:22, 'X', 'Y'))
+
+library_alignment <- library_alignment %>%
+  drop_na() %>%
+  filter(chr %in% list_chromosome)
+
+```
+
+**Create original gene list**
+
+```{r Select original gene list}
+
+gene_original <- c(unique(library_alignment$gene))
+
+```
+
+[**Updating df_count**]{style="color:red"}
+
+```{r}
+df_count <- rbind(df_count, 
+                  c(length(unique(library_alignment$sgRNA)),
+                    length(unique(library_alignment$gene)),
+                    length(library_alignment$sgRNA), 
+                    'selecting_normal_chr'))
+
+kable(df_count)
+```
+
+## Find and drop multi-target sgRNAs
+
+**Find multi-target sgRNAs with 0 mismatch alignment**
+
+```{r Find multi-target sgRNAs}
+
+# count the number of sgRNA dropped per gene due to multi-target sgRNA
+`[multi-target sgRNA] count dropped guides per gene` <- library_alignment %>%
+  filter(n_mismatches == 0) %>%
+  select(sgRNA, gene) %>%
+  count(sgRNA, gene) %>%
+  dplyr::rename('Frequency' = 'n') %>%
+  filter(Frequency > 1)
+
+`[multi-target sgRNA] list guides` <- c(`[multi-target sgRNA] count dropped guides per gene`$sgRNA)
+
+`dropped due to [multi-target]` <- `[multi-target sgRNA] count dropped guides per gene` %>%
+  count(gene) %>%
+  dplyr::rename('multi-target sgRNA' = 'n')
+
+```
+
+**Discard multi-target sgRNAs**
+
+```{r Discard multi-target sgRNAs}
+
+`%notin%` <- Negate(`%in%`)
+
+library_alignment <- library_alignment %>%
+  filter(sgRNA %notin% `[multi-target sgRNA] list guides`)
+
+```
+
+**Genes lost due to multi-target sgRNAs**
+
+```{r Find genes lost due to multi-target sgRNAs}
+
+genes_lost_multi_target_sgrna <- setdiff(gene_original, unique(library_alignment$gene))
+gene_original <- setdiff(gene_original, genes_lost_multi_target_sgrna)
+
+```
+
+[**Updating df_count**]{style="color:red"}
+
+```{r}
+df_count <- rbind(df_count,
+                  c((length(unique(library_alignment$sgRNA))), 
+                    length(unique(library_alignment$gene)),
+                    length(library_alignment$sgRNA), 
+                    paste(length(`[multi-target sgRNA] list guides`), ' multi-target guides discarded')))
+
+
+kable(df_count)
+```
+
+## Find and drop single mismatch sgRNAs
+
+**Find sgRNA that matched with a single mismatch anywhere in the sgRNA sequence**
+
+```{r Find sgRNA aligned with single mismatch}
+# count the number of multi-target sgRNAs
+`[single mismatch sgRNA] count dropped guides per gene` <- library_alignment %>%
+  filter(n_mismatches == 1) %>%
+  count(sgRNA, gene) %>%
+  dplyr::rename('Frequency' = 'n')
+
+`[single mismatch sgRNA] list guides` <- c(unique(`[single mismatch sgRNA] count dropped guides per gene`$sgRNA))
+
+`dropped due to [single-mismatch]` <- `[single mismatch sgRNA] count dropped guides per gene` %>%
+  count(gene) %>%
+  dplyr::rename('single mismatch sgRNA' = 'n')
+
+```
+
+**Drop sgRNA that matched with a single mismatch anywhere in the sgRNA sequence**
+
+```{r Discard sgRNA aligned with single mismatch}
+library_alignment <- library_alignment %>%
+  filter(sgRNA %notin% `[single mismatch sgRNA] list guides`)
+
+```
+
+**Genes lost due to single mismatch sgRNAs**
+
+```{r Find genes lost due to single mismatch sgRNAs}
+
+genes_lost_single_mismatch_sgrna <- setdiff(gene_original, unique(library_alignment$gene))
+gene_original <- setdiff(gene_original, genes_lost_single_mismatch_sgrna)
+
+```
+
+[**Updating df_count**]{style="color:red"}
+
+```{r}
+df_count <- rbind(df_count,
+                  c((length(unique(library_alignment$sgRNA))), 
+                    length(unique(library_alignment$gene)),
+                    length(library_alignment$sgRNA), 
+                    paste(length(`[single mismatch sgRNA] list guides`), ' single mismatch sgRNA discarded')))
+
+
+kable(df_count)
+```
+
+## Find and drop sgRNA align with double mismatches at the PAM distal
+
+**Find sgRNA location, PAM sites, and cut site**
+
+```{r Find sgRNA location, PAM sites, and cut site}
+# cut position, start position, end position, pam end position are relative to the pam start position
+
+library_alignment <- library_alignment %>% 
+  dplyr::rename(pam_start = pam_site) %>%
+  mutate(
+  pam_start = ifelse(strand == '+', pam_start, pam_start-2),
+  pam_end = ifelse(strand == '+', pam_start+2, pam_start+2),
+  start_pos = ifelse(strand == '+', pam_start-21, pam_start+3),
+  end_pos = ifelse(strand == '+', pam_start-1, pam_start+23),
+  cut_pos = ifelse(strand == '+', pam_start-4, pam_start+5)) %>%
+  relocate(pam_start, .after = cut_pos) %>%
+  relocate(start_pos, .before = cut_pos) %>%
+  relocate(end_pos, .after = start_pos) %>%
+  relocate(pam_end, .after = pam_start)
+
+```
+
+**Find any sgRNAs with 2 mismatches alignments**
+
+```{r Find sgRNAs with 2 mismatches alignments}
+
+library_alignment <- library_alignment %>%
+  rowwise() %>%
+  mutate(
+    mismatch_loc = list(which(strsplit(spacer, '')[[1]] != strsplit(protospacer, '')[[1]]))) %>%
+  mutate(
+    type = 
+      if_else(is.na(mismatch_loc[1]) | mismatch_loc[1] == 0,'perfect',
+      if_else(strand == '+' & (mismatch_loc[1] < 3 & mismatch_loc[2] < 3),'pam-distal double mismatch',
+      if_else(strand == '-' & (mismatch_loc[1] > 18 & mismatch_loc[2] > 18),'pam-distal double mismatch',
+          'double mismatch'
+        )
+      )
+    )
+  )
+
+double_mismatch_freq <- library_alignment %>%
+  count(type) %>%
+  dplyr::rename('how many alignments' = 'n')
+print(double_mismatch_freq)
+
+pam_distal_double_mismatch <- library_alignment %>%
+  filter(type == 'pam-distal double mismatch')
+
+paste('total sgRNAs with pam distal double mismatch: ', length(unique(pam_distal_double_mismatch$sgRNA)))
+paste('total alignments with pam distal double mismatch: ', length(pam_distal_double_mismatch$sgRNA))
+
+pam_distal_double_mismatch 
+
+`[PAM-distal double mismatch] count dropped guides per gene` <- pam_distal_double_mismatch %>%
+  select(sgRNA, gene) %>%
+  count(sgRNA, gene) %>%
+  dplyr::rename('Frequency' = 'n')
+  
+
+`dropped due to [PAM-distal double mismatch]` <- `[PAM-distal double mismatch] count dropped guides per gene` %>%
+  count(gene) %>%
+  dplyr::rename('PAM distal double mismatch' = 'n')
+
+`[PAM-distal double mismatch] list guides` <- c(unique(`[PAM-distal double mismatch] count dropped guides per gene`$sgRNA))
+
+```
+
+**Drop sgRNAs aligned with double mismatches at PAM distal**
+
+```{r Discard sgRNA aligned with double mismatches at PAM distal}
+
+library_alignment <- library_alignment %>%
+  filter(sgRNA %notin% pam_distal_double_mismatch$sgRNA)
+
+paste('count sgRNAs: ', length(unique(library_alignment$sgRNA)))
+paste('alignments left after dropping sgRNAs with pam distal double mismatch:', length(library_alignment$sgRNA))
+
+print(length(library_alignment$n_mismatches[library_alignment$n_mismatches] > 1))
+
+```
+
+**Genes lost due to PAM distal double mismatch sgRNAs**
+
+```{r Find genes lost due to PAM distal double mismatches}
+
+genes_lost_pam_mismatch_sgrna <- setdiff(gene_original, unique(library_alignment$gene))
+gene_original <- setdiff(gene_original, genes_lost_pam_mismatch_sgrna)
+
+```
+
+[**Updating df_count**]{style="color:red"}
+
+```{r}
+df_count <- rbind(df_count,
+                  c((length(unique(library_alignment$sgRNA))), 
+                    length(unique(library_alignment$gene)),
+                    length(library_alignment$sgRNA), 
+                    paste(length(`[PAM-distal double mismatch] list guides`), ' PAM-distal double mismatch sgRNA discarded')))
+
+
+kable(df_count)
+```
+
+## CCDS annotation of sgRNA library
+
+**Import CCDS data (codes from Barbara's pipeline)**
+
+```{r Import CCDS data}
+
+ccds <- read_delim('./raw_data/CCDS_20240128.txt', delim = '\t')
+
+ccds$cds_from <- as.integer(ccds$cds_from)
+ccds$cds_to <- as.integer(ccds$cds_to)
+
+ccds <- ccds %>%
+  dplyr::rename('chromosome' = '#chromosome') %>%
+  mutate(chromosome = str_c("chr", chromosome)) %>%
+  filter(ccds_status %in% c("Public", "Reviewed, update pending", "Under review, update")) %>%
+  filter(chromosome %in% list_chromosome, !is.na(cds_from), !is.na(cds_to))
+
+```
+
+**Transform gene annotations to format expected by makeGRangesFromDataFrame** **One row per exon location, gene start and end spans the full exon interval**
+
+```{r Transform gene annotations}
+
+ccds_exon <- ccds %>%
+  mutate(cds_interval = str_replace_all(cds_locations, "[\\[\\]]", "") %>% str_split("\\s*,\\s*")) %>%
+  tidyr::unnest(cds_interval) %>%
+  group_by(gene, gene_id, cds_locations) %>% 
+  mutate(exon_code = ifelse(cds_strand=="+", 1:dplyr::n(), dplyr::n():1)) %>% 
+  ungroup() %>%
+  dplyr::mutate(cds_start = str_extract(cds_interval, "^[0-9]+") %>% as.integer,
+                cds_end = str_extract(cds_interval, "[0-9]+$") %>% as.integer) %>%
+  dplyr::select(gene, gene_id, chromosome, start=cds_start, end=cds_end, strand=cds_strand,
+                gene_start=cds_from, gene_end=cds_to, exon_code)
+
+genome_info <- GenomeInfoDb::Seqinfo(genome="hg38")[list_chromosome]
+
+gene_annot_granges <- ccds_exon %>% 
+  GenomicRanges::makeGRangesFromDataFrame(seqinfo=genome_info, 
+                                          keep.extra.columns=T, 
+                                          na.rm = TRUE)
+
+```
+
+**Make GRanges from library_alignment**
+
+```{r make GRanges from alignment data}
+
+guide_aln_granges <- library_alignment %>%
+  select(id=sgRNA, Spacer=spacer, Protospacer=protospacer, Chr=chr, Start=cut_pos, strand, mismatch=n_mismatches) %>%
+  mutate(End = Start) %>%
+  GenomicRanges::makeGRangesFromDataFrame(seqinfo=genome_info, keep.extra.columns=T)
+
+```
+
+**Find overlaps between gene annotation granges and cellecta alignment granges**
+
+```{r Find overlaps between gene annotation granges and alignment granges}
+
+hits <- GenomicRanges::findOverlaps(guide_aln_granges, gene_annot_granges, ignore.strand=T) %>% as_tibble
+
+gene_df <- hits %>%
+  transmute(sgrna = guide_aln_granges$id[queryHits],
+            spacer = guide_aln_granges$Spacer[queryHits],
+            protospacer = guide_aln_granges$Protospacer[queryHits],
+            mismatches = guide_aln_granges$mismatch[queryHits],
+            chr = GenomicRanges::seqnames(guide_aln_granges)[queryHits] %>% as.character() ,
+            cut_pos = GenomicRanges::start(guide_aln_granges)[queryHits] %>% as.integer(),
+            strand = GenomicRanges::strand(guide_aln_granges)[queryHits] %>% as.character(),
+            gene = gene_annot_granges$gene[subjectHits],
+            CDS_strand = GenomicRanges::strand(gene_annot_granges)[subjectHits] %>% as.character(),
+            CDS_start = GenomicRanges::start(gene_annot_granges)[subjectHits] %>% as.integer(),
+            CDS_end = GenomicRanges::end(gene_annot_granges)[subjectHits] %>% as.integer()) %>%
+  distinct()
+
+paste('count sgRNAs: ', length(unique(gene_df$sgrna)))
+paste('alignments left after annotation:', length(gene_df$sgrna))
+```
+
+**Sanity check of gene symbol for the alignment and annotation data** - Strictly pick 0 mismatch alignment
+
+```{r Sanity check of gene symbol for the alignment and annotation data}
+
+gene_df %>%
+  filter(mismatches == 0) %>%
+  mutate(notes = case_when(str_extract(sgrna, "(?<=sg)([A-Za-z0-9-]+)") %in% gene ~ 'symbol match',
+                           str_extract(sgrna, "(?<=sg)([A-Za-z0-9-]+)") %notin% gene ~ 'symbol mismatch')) %>%
+  select(gene, notes) %>%
+  distinct() %>%
+  count(notes) %>%
+  dplyr::rename('how_many' = 'n') %>%
+  ggplot(aes(notes, how_many)) +
+    geom_histogram(stat = 'identity') +
+    labs(
+      title = paste('Sanity check: crosschecking sgRNA alignment with exon and gene symbol annotation'),
+      x = '',
+      y = 'Number of genes'
+    ) +
+    geom_text(aes(label = how_many), vjust=-0.5) +
+    scale_x_discrete(labels=c('symbol match' = 'gene symbol match with exon annotation',
+                              'symbol mismatch' = 'gene symbol not match \nwith exon annotation')) +
+    theme_light()
+
+# string = 'sgLOC100652824_1'
+# paste(str_extract(string, '.$'))
+
+```
+
+**Correct the sgRNA according to targeted gene symbol**
+
+```{r Correct the sgRNA according to targeted gene symbol}
+
+# categorize sgRNA with gene symbol match and sgRNA with gene symbol mismatch
+gene_df_check <- gene_df %>%
+  filter(mismatches == 0) %>%
+  mutate(notes = case_when(str_extract(sgrna, "(?<=sg)([A-Za-z0-9-]+)") %in% gene ~ 'symbol match',
+                           str_extract(sgrna, "(?<=sg)([A-Za-z0-9-]+)") %notin% gene ~ 'symbol mismatch'))
+
+
+# check for duplicate spacer in gene_df_match and discard it (sgRNA targeting the same gene but different exon location)
+gene_df_match <- gene_df_check %>%
+  filter(notes == 'symbol match') %>%
+  mutate(duplicate_spacer_gene = duplicated(spacer, gene)) %>%
+  arrange(sgrna) %>%
+  filter(!duplicate_spacer_gene == TRUE)
+
+# separate sgRNA with gene symbol mismatch dataframe, discard duplicated spacer, and correct sgRNA - gene name according to the alignment exon location and add _SC to tag the sgRNA with corrected gene symbol
+gene_df_mismatch <- gene_df_check %>%
+  filter(notes == 'symbol mismatch') %>%
+  mutate(duplicate_spacer_gene = duplicated(spacer, gene)) %>%
+  arrange(sgrna) %>%
+  filter(!duplicate_spacer_gene == TRUE) %>%
+  mutate(sgrna_num = str_extract(sgrna, '.$'),
+         new_sgrna_id = paste('sg', gene, '_', sgrna_num, '_SC' , sep ='')) %>%
+  select(-c(sgrna, sgrna_num)) %>%
+  dplyr::rename('sgrna' = 'new_sgrna_id') %>%
+  relocate(sgrna, .before = spacer) %>%
+  mutate(notes = 'symbol corrected')
+
+# find corrected genes that already exist in gene_df_match put it into a new dataframe called as corrected_exist_gene
+list_corrected_exist_gene <- intersect(gene_df_match$gene, gene_df_mismatch$gene)
+corrected_exist_gene <- gene_df_match %>%
+  filter(gene %in% list_corrected_exist_gene)
+
+# filter out problematic gene (gene that were targeted by sgRNA in Cellecta library, but also targeted by another sgRNA with corrected symbol)
+gene_df_match <- gene_df_match %>%
+  filter(gene %notin% list_corrected_exist_gene)
+
+# join gene_df_mismatch with gene_df_match to find the duplicated sgRNA
+gene_df_mismatch <- gene_df_mismatch %>%
+  full_join(corrected_exist_gene) %>%
+  arrange(gene, desc(notes)) %>%
+  mutate(duplicate_spacer_gene = duplicated(spacer, gene))
+
+# full_join the gene_df_mismatch with gene_df_match to become a gene_df_corrected
+gene_df_corrected <- gene_df_match %>%
+  full_join(gene_df_mismatch)
+
+
+# plot the distribution of sgRNA - gene symbol after sanity check alignment
+gene_df_mismatch %>%
+  select(gene, notes) %>%
+  count(gene, notes) %>%
+  dplyr::rename('num_sgrna' = 'n') %>%
+  arrange(gene, num_sgrna) %>%
+  ggplot(aes(x = gene, y = num_sgrna, fill = notes)) +
+  geom_col(color = 'white') +
+  labs(
+    title = paste('Distribution of corrected sgRNA - gene symbol after sanity check alignment'),
+    x = '',
+    y = 'Number of sgRNAs') +
+  geom_text(aes(label = num_sgrna, group = notes),  position = position_stack(vjust = 0.5)) +
+  theme_light() +
+  scale_fill_manual(values=c('lightgreen', 'powderblue')) +
+  theme(axis.text.x = element_text(vjust = 0.5, hjust = 0.5, angle = 45))
+
+
+```
+
+**Genes lost after annotation**
+
+```{r Find genes lost after annotation}
+
+# gene_track_annotation : a dataframe of the old and approved gene symbol
+gene_track_annotation <- gene_df_check %>%
+  filter(notes == 'symbol mismatch') %>%
+  select(sgrna, gene, notes) %>%
+  mutate(old_gene = str_extract(sgrna, "(?<=sg)([A-Za-z0-9-]+)")) %>%
+  relocate(old_gene, .before = gene) %>%
+  select(-sgrna) %>%
+  distinct()
+
+prev_gene <- c(gene_track_annotation$old_gene)
+align_gene <- c(gene_track_annotation$gene)
+
+gene_original_corrected <- sapply(gene_original, function(gene_query){
+  match_index <- match(gene_query, prev_gene)
+  if (!is.na(match_index)) {
+   align_gene[match_index]
+  } else {
+    gene_query
+  }
+})
+
+gene_original_corrected <- as.character(gene_original_corrected)
+
+paste('Corrected gene name: ')
+setdiff(gene_original_corrected, gene_original)
+
+genes_lost_after_annotation <- setdiff(gene_original_corrected, unique(gene_df_corrected$gene))
+gene_original_corrected <- setdiff(gene_original_corrected, genes_lost_after_annotation)
+
+```
+
+[**Updating df_count**]{style="color:red"}
+
+```{r}
+df_count <- rbind(df_count,
+                  c((length(unique(gene_df_corrected$sgrna))), 
+                    length(unique(gene_df_corrected$gene)),
+                    length(gene_df_corrected$sgrna), 
+                    paste(length(unique(gene_df_corrected$sgrna)), ' sgRNA targeting exon only')))
+
+
+kable(df_count)
+
+```
+
+**sgRNAs failed to target exon**
+
+```{r Find sgRNAs failed to target exon}
+
+list_sgRNAs_not_target_exon <- setdiff(unique(library_alignment$sgRNA), unique(gene_df_corrected$sgrna))
+
+sgRNAs_not_target_exon <- sgRNA_library %>%
+  select(sgRNA, gene) %>%
+  filter(sgRNA %in% list_sgRNAs_not_target_exon) %>%
+  count(gene) %>%
+  filter(gene %notin% gene_track_annotation$old_gene) %>%
+  dplyr::rename('sgRNA not target exon' = 'n')
+
+```
+
+## HGNC annotation of sgRNA library
+
+**Adding data from HGNC for annotated sgRNA data**
+
+```{r Add HGNC annotation of sgRNA library}
+hgnc <- import_hgnc_dataset()
+
+hgnc_selected <- hgnc %>%
+  select(symbol, name, locus_group, locus_type) %>%
+  dplyr::rename('gene' = 'symbol')
+
+sgRNA_library_gene_df <- gene_df_corrected %>%
+  left_join(hgnc_selected, by = 'gene')
+
+paste('count sgRNAs: ', length(unique(sgRNA_library_gene_df$sgrna)))
+paste('alignments left after data joining with hgnc:', length(sgRNA_library_gene_df$sgrna))
+
+```
+
+## Check sgRNAs targeting exons and successfully annotated (protein coding genes only)
+
+**Filter sgRNAs targeting protein-coding genes only (automatically discard readthrough gene, complex locus constituent, etc)**
+
+```{r Filter sgRNAs targeting protein-coding genes only}
+
+sgRNA_library_gene_df_annot <- sgRNA_library_gene_df %>%
+  filter(locus_group == 'protein-coding gene')
+
+paste('count sgRNAs: ', length(unique(sgRNA_library_gene_df_annot$sgrna)))
+paste('alignments left after data selection of protein-coding gene only:', length(sgRNA_library_gene_df_annot$sgrna))
+
+```
+
+**Genes failed during HGNC annotation (not protein-coding genes)**
+
+```{r Find genes failed in the annotation}
+
+genes_not_pcg <- setdiff(sgRNA_library_gene_df$gene, sgRNA_library_gene_df_annot$gene)
+
+genes_not_pcg_df <- sgRNA_library_gene_df %>%#
+  filter(gene %in% genes_not_pcg)
+  
+```
+
+[**Updating df_count**]{style="color:red"}
+
+```{r}
+df_count <- rbind(df_count,
+                  c((length(unique(sgRNA_library_gene_df_annot$sgrna))), 
+                    length(unique(sgRNA_library_gene_df_annot$gene)),
+                    length(sgRNA_library_gene_df_annot$sgrna), 
+                    paste(length(unique(sgRNA_library_gene_df_annot$sgrna)), ' sgRNA successfully annotated')))
+
+
+kable(df_count)
+
+```
+
+## Clean sgRNA library
+
+```{r Obtain refined sgRNA library, echo = FALSE}
+
+sgRNA_library_cleaned <- sgRNA_library_gene_df_annot %>%
+  select(sgrna, gene, spacer) %>%
+  distinct() %>%
+  dplyr::rename('sgRNA' = 'sgrna')
+
+count_guides_per_gene <- sgRNA_library_cleaned %>%
+  count(gene) %>%
+  count(n) %>%
+  mutate(`total number of guides` = n * nn) %>%
+  dplyr::rename('number of guides per gene' = 'n') %>%
+  dplyr::rename('how many genes' = 'nn')
+
+print(paste('total number of sgRNA: ', sum(count_guides_per_gene$`total number of guides`)))
+
+num_original_genes <- length(unique(sgRNA_library$gene))
+num_genes_after_cleaning <- sum(count_guides_per_gene$`how many genes`)
+
+paste('number of original target genes in the library: ', length(unique(sgRNA_library$gene)))
+paste('number of genes after cleaning: ', sum(count_guides_per_gene$`how many genes`))
+paste('number of genes lost: ', num_original_genes-num_genes_after_cleaning)
+
+```
+
+## Discard any genes targeted by less than 3 sgRNAs
+
+```{r Discard any genes targeted by < 3 sgRNAs, echo = FALSE}
+
+guides_below_3 <- sgRNA_library_cleaned %>%
+  count(gene) %>%
+  filter(n < 3)
+
+sgRNA_library_cleaned <- sgRNA_library_cleaned %>%
+  filter(gene %notin% guides_below_3$gene)
+
+count_guides_per_gene <- sgRNA_library_cleaned %>%
+  count(gene) %>%
+  count(n) %>%
+  mutate(`total number of guides` = n * nn) %>%
+  dplyr::rename('number of guides per gene' = 'n') %>%
+  dplyr::rename('how many genes' = 'nn')
+
+num_original_genes <- length(unique(sgRNA_library$gene))
+num_genes_after_cleaning_3_guides <- length(unique(sgRNA_library_cleaned$gene))
+
+paste('total number of sgRNA: ', sum(count_guides_per_gene$`total number of guides`))
+paste('number of original target genes in the library: ', length(unique(sgRNA_library$gene)))
+paste('number of genes after exclude gene targeted by guides < 3: ', length(unique(sgRNA_library_cleaned$gene)))
+paste('number of genes lost: ', num_original_genes-num_genes_after_cleaning_3_guides)
+
+```
+
+[**Updating df_count**]{style="color:red"}
+
+```{r}
+df_count <- rbind(df_count,
+                  c((length(unique(sgRNA_library_cleaned$sgRNA))), 
+                    length(unique(sgRNA_library_cleaned$gene)),
+                    '-', 
+                    paste(length(unique(guides_below_3$gene)), ' genes discarded (< 3 sgRNAs)')))
+
+
+kable(df_count)
+
+```
+
+# Result
+
+## Calculate total sgRNAs and genes lost
+
+```{r Calculate total sgRNAs and genes lost}
+
+`total sgRNA or gene lost` <- data.frame('gene' = sgRNA_library$gene) %>%
+  count(gene) %>%
+  dplyr::rename('sgRNA number' = 'n') %>%
+  left_join(`dropped due to [multi-target]`, by = 'gene') %>%
+  mutate(`multi-target sgRNA` = replace_na(`multi-target sgRNA`, 0)) %>%
+  left_join(`dropped due to [single-mismatch]`, by = 'gene') %>%
+  mutate(`single mismatch sgRNA` = replace_na(`single mismatch sgRNA`, 0)) %>%
+  left_join(`dropped due to [PAM-distal double mismatch]`, by = 'gene') %>%
+  mutate(`PAM distal double mismatch` = replace_na(`PAM distal double mismatch`, 0)) %>%
+  left_join(sgRNAs_not_target_exon, by = 'gene') %>%
+  mutate(`sgRNA not target exon` = replace_na(`sgRNA not target exon`, 0)) %>%
+  mutate(
+    `total sgRNA` = `sgRNA number` - (`multi-target sgRNA` + `single mismatch sgRNA` + `PAM distal double mismatch` + `sgRNA not target exon`)) %>%
+  mutate(`symbol change` = case_when(gene %in% gene_track_annotation$old_gene ~
+                                       gene_track_annotation$gene[match(gene, gene_track_annotation$old_gene)],
+                                        TRUE ~ 'no')) %>%
+  mutate(`protein-coding gene` = case_when(gene %in% c('Neg_Control', 'INTRON_CTRL') ~ 'no',
+                                           gene %in% genes_not_pcg ~ 'no',
+                                           TRUE ~ 'yes')) %>%
+  mutate(`quality check` = case_when((`symbol change` != 'no') ~ 'not counted (symbol change)',
+                                     (`total sgRNA` > 2 & `protein-coding gene` == 'yes') ~ 'pass',
+                                     TRUE ~ 'fail'))
+
+
+crosscheck_count <- sgRNA_library_cleaned %>%
+  count(gene) %>%
+  dplyr::rename('total sgRNA in cleaned library' = 'n')
+
+`total sgRNA or gene` <- `total sgRNA or gene lost` %>%
+  left_join(crosscheck_count, by = join_by(gene)) %>%
+  mutate(`total sgRNA in cleaned library` = replace_na(`total sgRNA in cleaned library`, 0)) %>%
+  relocate(`total sgRNA in cleaned library`, .after = `total sgRNA`) %>%
+  mutate(`number match` = mapply(identical,                 
+                                 `total sgRNA`, 
+                                 `total sgRNA in cleaned library`)) %>%
+  relocate(`number match`, .after = `total sgRNA in cleaned library`)
+
+
+```
+
+## Export the refined library and sgRNA cleaning report
+
+-   Export cleaned sgRNA library (CSV file)
+-   Export total sgRNA or gene lost (Excel file)
+
+```{r Export cleaned sgRNA library}
+
+sgRNA_library_cleaned <- sgRNA_library_cleaned[, c('sgRNA', 'spacer', 'gene')]
+
+# value <- paste0(round(length(sgRNA_library_cleaned) / 1000, digits = 0), 'K')
+
+write_csv(sgRNA_library_cleaned, 
+          file = paste('./object_intermediate/', sgRNA_library_selected, '_cleaned_without_control.csv', sep = ''))
+
+write.xlsx(`total sgRNA or gene lost`, file = paste('./object_intermediate/', sgRNA_library_selected, '_cleaned_report.xlsx', sep = ''), row.names = FALSE)
+
+
+```
+
+**Plot multi-target sgRNAs** 
+[Not available at the moment]{style="color:red"}
+
+```{r, include = FALSE, eval = FALSE, echo = FALSE}
+
+read_counts_from_mageck <- '../MAGeCK_analysis/mageck_count_corrected/cellecta_150K_corrected_count_df.txt'
+top_multi_sgrna_num <- 10
+
+multi_target_guides <- `[multi-target sgRNA] count dropped guides per gene` %>%
+    dplyr::rename('Frequency of alignments' = 'Frequency') %>%
+    dplyr::rename('Target Gene' = 'gene') %>%
+    filter(`Frequency of alignments` > 1) %>%
+    arrange(desc(`Frequency of alignments`)) %>%
+    top_n(n = top_multi_sgrna_num)
+
+sgRNA_read_counts <- read.table(read_counts_from_mageck, header = TRUE)
+sgRNA_read_counts <- sgRNA_read_counts %>%
+  select(-DAY24_XL413) %>%
+  filter(sgRNA %in% `[multi-target sgRNA] list guides`)
+
+ggplot_data <- sgRNA_read_counts %>%
+  filter(sgRNA %in% multi_target_guides$sgRNA) %>%
+  left_join(multi_target_guides, by = 'sgRNA') %>%
+  mutate(sgRNA = paste(sgRNA, ' (', `Frequency of alignments`, ' alignments)', sep ='')) %>%
+  select(-`Frequency of alignments`) %>%
+  pivot_longer(cols=c('DAY0_CNTR', 'DAY20_DMSO'),
+               names_to='experiment',
+               values_to='sgRNA_count')
+
+final_plot <- ggplot_data %>%
+  ggplot(aes(experiment, sgRNA_count, color=sgRNA, group=sgRNA)) +
+  geom_point(size = 2, shape=16) +
+  geom_line(linewidth = 1) +
+  labs(x = 'Experiment',
+       y = 'sgRNA Count',
+       title = paste('Top ', top_multi_sgrna_num, ' multi-target sgRNAs in ', sgRNA_library_selected, ' library', sep=''),
+       color = 'sgRNA') +
+  scale_x_discrete(labels = c('DAY0_CNTR' = 'Control \nDay 0', 
+                              'DAY20_DMSO' = 'Untreated \nDay 20')) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.3, face = 'bold', size = 18),
+        plot.subtitle = element_text(hjust = 0.5, face = 'bold', size = 0),
+        axis.title.x = element_text(vjust = 0.5, size = 15, face = 'bold'),
+        axis.title.y = element_text(hjust = 0.5, vjust = 2, size = 15, face = 'bold'),
+        axis.text.x = element_text(face = 'bold', size = 15),
+        axis.text.y = element_text(face = 'bold', size = 15),
+        legend.text = element_text(size = 11),
+        legend.title = element_text(size = 13),
+        panel.grid.minor.x = element_blank(),
+        legend.position = c(0.8, 0.6))
+        # legend.position = 'none')) +
+  # geom_dl(aes(label = sgRNA), 
+  #         method = list(dl.trans(x = x - 0.3), 'first.points', cex = 1.2))
+
+ggsave(
+  path = 'plot/',
+  plot = final_plot,
+  width = 10, 
+  height = 10, 
+  dpi = 500,
+  filename = paste(sgRNA_library_selected, '-multi-target-guides.png', sep=''))
+
+final_plot
+
+```
+
+**Export total sgRNA lost per gene into a csv file** 
+[Not available at the moment]{style="color:red"}
+
+```{r, echo=FALSE, eval=FALSE}
+
+write_csv(`total sgRNA lost per gene`, file = paste('./output_cleaning/', sgRNA_library_selected, '_total_sgRNA_lost_per_gene.csv', sep = ''))
+
+write_csv(`total sgRNA or gene lost`, file = paste('./output_cleaning/', sgRNA_library_selected, '_total_sgRNA_or_gene_lost.csv', sep = ''))
+
+
+```
