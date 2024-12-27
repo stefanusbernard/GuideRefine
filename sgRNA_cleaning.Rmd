@@ -113,9 +113,11 @@ library(xlsx)
 
 ## Define any filename
 
-```{r Define any filename}
+```{r Define any filename (User input)}
 
-sgRNA_library_selected <- 'M3_preprocessed_precleaning'
+sgRNA_library_selected <- 'sample_M1_150K'
+control <- c('Neg_Control', 'INTRON_CTRL')
+
 aln_2_mismatch_filename <- paste(sgRNA_library_selected, '_aln.csv', sep ='')
 
 paste('sgRNA library name:', sgRNA_library_selected)
@@ -125,49 +127,11 @@ paste('Alignmment with 2 mismatch filename (csv format):', aln_2_mismatch_filena
 
 ## Import sgRNA library and create directory for output_cleaning and intermediate files
 
-```         
-dir.create('output_cleaning')
-sgRNA_library_selected <- 'Cellecta'
-sgRNA_library_raw <- read_csv(paste('./raw_data/', sgRNA_library_selected, '.csv', sep = ''))
-head(sgRNA_library)
-```
-
 ```{r Create folder and import library cellecta, include=FALSE}
 dir.create('output_cleaning')
 dir.create('object_intermediate')
-sgRNA_library_raw <- read_csv(paste('./object_intermediate/', sgRNA_library_selected, '.csv', sep = ''))
-```
-
-## Separate control library from original library
-
-```{r Separate control library from original library}
-
-`%notin%` <- negate(`%in%`)
-
-control <- c('Neg_Control',
-             'INTRON_CTRL')
-
-sgRNA_library <- sgRNA_library_raw %>%
-  filter(gene %notin% control)
-
-sgRNA_library_control <- sgRNA_library_raw %>%
-  filter(gene %in% control)
-
-```
-
-## Export control sgRNA library into a file
-
-```{r Write csv file of control sgRNA}
-
-write_csv(sgRNA_library_control, file = paste('./object_intermediate/', sgRNA_library_selected, '_control.csv', sep = ''))
-
-```
-
-## Check the sgRNA library
-
-```{r}
-
-head(sgRNA_library)
+sgRNA_library <- read_tsv(paste(sgRNA_library_selected, '.tsv', sep = ''), col_names = FALSE)
+colnames(sgRNA_library) <- c('sgRNA', 'spacer', 'gene')
 
 ```
 
@@ -273,8 +237,7 @@ kable(df_count)
 list_chromosome <- paste0('chr', c(1:22, 'X', 'Y'))
 
 library_alignment <- library_alignment %>%
-  drop_na() %>%
-  filter(chr %in% list_chromosome)
+  filter(chr %in% list_chromosome | is.na(chr))
 
 ```
 
@@ -504,6 +467,21 @@ df_count <- rbind(df_count,
 
 
 kable(df_count)
+```
+
+## Separation of control sgRNA with the rest of sgRNA
+
+```{r Separate control sgRNA with the rest of sgRNA}
+
+sgRNA_library_control <- library_alignment %>%
+  filter(gene %in% control) %>%
+  select(sgRNA, gene, spacer) %>%
+  distinct()
+
+
+
+
+
 ```
 
 ## CCDS annotation of sgRNA library
