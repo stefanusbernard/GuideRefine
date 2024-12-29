@@ -115,6 +115,7 @@ library(xlsx)
 
 sgRNA_library_selected <- 'sample_M1_150K'
 control <- c('Neg_Control', 'INTRON_CTRL')
+ccds_filename <- 'CCDS_20240128.txt'
 
 aln_2_mismatch_filename <- paste(sgRNA_library_selected, '_aln.csv', sep ='')
 
@@ -169,8 +170,7 @@ if (file_test('-f', paste('./object_intermediate/', aln_2_mismatch_filename, sep
       
       bowtie_index <- file.path('./bowtie_index', 'hg38')
       
-      # change which spacer would like to be used cellecta or avana
-      scoring_alignment <- runCrisprBowtie(spacers_sequence,
+      alignment_guides <- runCrisprBowtie(spacers_sequence,
                                            mode = 'spacer',
                                            bsgenome = BSgenome.Hsapiens.UCSC.hg38,
                                            crisprNuclease = crisprNuclease,
@@ -178,10 +178,10 @@ if (file_test('-f', paste('./object_intermediate/', aln_2_mismatch_filename, sep
                                            canonical = TRUE,
                                            bowtie_index = bowtie_index)
       
-      scoring_data <- sgRNA_library %>%
-        left_join(scoring_alignment, by = join_by(spacer))
+      alignment_data <- sgRNA_library %>%
+        left_join(alignment_guides, by = join_by(spacer))
       
-      write.csv(scoring_data, 
+      write.csv(alignment_data, 
                 file = paste('./object_intermediate/', aln_2_mismatch_filename, sep = ''), 
                 row.names = FALSE)
   
@@ -471,13 +471,16 @@ kable(df_count)
 
 ```{r Separate control sgRNA with the rest of sgRNA}
 
+# separate control sgRNA from the rest of sgRNA
 sgRNA_library_control <- library_alignment %>%
   filter(gene %in% control) %>%
-  select(sgRNA, gene, spacer) %>%
+  select(sgRNA, spacer, gene) %>%
   distinct()
 
+# filter gene not in control and drop sgRNAs not targeting anywhere
 library_alignment <- library_alignment %>%
-  filter(gene %notin% control)
+  filter(gene %notin% control) %>%
+  drop_na()
 
 ```
 
@@ -487,7 +490,7 @@ library_alignment <- library_alignment %>%
 
 ```{r Import CCDS data}
 
-ccds <- read_delim('./raw_data/CCDS_20240128.txt', delim = '\t')
+ccds <- read_delim(ccds_filename, delim = '\t')
 
 ccds$cds_from <- as.integer(ccds$cds_from)
 ccds$cds_to <- as.integer(ccds$cds_to)
@@ -529,9 +532,15 @@ gene_annot_granges <- ccds_exon %>%
 ```{r make GRanges from alignment data}
 
 guide_aln_granges <- library_alignment %>%
-  select(id=sgRNA, Spacer=spacer, Protospacer=protospacer, Chr=chr, Start=cut_pos, strand, mismatch=n_mismatches) %>%
+  select(id = sgRNA, 
+         Spacer = spacer, 
+         Protospacer = protospacer, 
+         Chr = chr, 
+         Start = cut_pos, 
+         strand, 
+         mismatch = n_mismatches) %>%
   mutate(End = Start) %>%
-  GenomicRanges::makeGRangesFromDataFrame(seqinfo=genome_info, keep.extra.columns=T)
+  GenomicRanges::makeGRangesFromDataFrame(seqinfo = genome_info, keep.extra.columns = T)
 
 ```
 
@@ -559,9 +568,9 @@ paste('count sgRNAs: ', length(unique(gene_df$sgrna)))
 paste('alignments left after annotation:', length(gene_df$sgrna))
 ```
 
-**Sanity check of gene symbol for the alignment and annotation data** - Strictly pick 0 mismatch alignment
+**Validation of gene symbol for the alignment and annotation data** - Strictly pick 0 mismatch alignment
 
-```{r Sanity check of gene symbol for the alignment and annotation data}
+```{r Validation of gene symbol for the alignment and annotation data}
 
 gene_df %>%
   filter(mismatches == 0) %>%
@@ -574,7 +583,7 @@ gene_df %>%
   ggplot(aes(notes, how_many)) +
     geom_histogram(stat = 'identity') +
     labs(
-      title = paste('Sanity check: crosschecking sgRNA alignment with exon and gene symbol annotation'),
+      title = paste('Validation of sgRNA alignment with exon and gene symbol annotation'),
       x = '',
       y = 'Number of genes'
     ) +
@@ -582,9 +591,6 @@ gene_df %>%
     scale_x_discrete(labels=c('symbol match' = 'gene symbol match with exon annotation',
                               'symbol mismatch' = 'gene symbol not match \nwith exon annotation')) +
     theme_light()
-
-# string = 'sgLOC100652824_1'
-# paste(str_extract(string, '.$'))
 
 ```
 
@@ -638,23 +644,44 @@ gene_df_mismatch <- gene_df_mismatch %>%
 gene_df_corrected <- gene_df_match %>%
   full_join(gene_df_mismatch)
 
-
-# plot the distribution of sgRNA - gene symbol after sanity check alignment
-gene_df_mismatch %>%
+# Histogram of corrected gene symbol
+gene_df_corrected %>%
+  filter(mismatches == 0) %>%
+  mutate(notes = case_when(str_extract(sgrna, "(?<=sg)([A-Za-z0-9-]+)") %in% gene ~ 'symbol match',
+                           str_extract(sgrna, "(?<=sg)([A-Za-z0-9-]+)") %notin% gene ~ 'symbol mismatch')) %>%
   select(gene, notes) %>%
-  count(gene, notes) %>%
-  dplyr::rename('num_sgrna' = 'n') %>%
-  arrange(gene, num_sgrna) %>%
-  ggplot(aes(x = gene, y = num_sgrna, fill = notes)) +
-  geom_col(color = 'white') +
-  labs(
-    title = paste('Distribution of corrected sgRNA - gene symbol after sanity check alignment'),
-    x = '',
-    y = 'Number of sgRNAs') +
-  geom_text(aes(label = num_sgrna, group = notes),  position = position_stack(vjust = 0.5)) +
-  theme_light() +
-  scale_fill_manual(values=c('lightgreen', 'powderblue')) +
-  theme(axis.text.x = element_text(vjust = 0.5, hjust = 0.5, angle = 45))
+  distinct() %>%
+  count(notes) %>%
+  dplyr::rename('how_many' = 'n') %>%
+  ggplot(aes(notes, how_many)) +
+    geom_histogram(stat = 'identity') +
+    labs(
+      title = paste('Validation of sgRNA alignment with exon and gene symbol annotation'),
+      x = '',
+      y = 'Number of genes'
+    ) +
+    geom_text(aes(label = how_many), vjust=-0.5) +
+    scale_x_discrete(labels=c('symbol match' = 'gene symbol match with exon annotation',
+                              'symbol mismatch' = 'gene symbol not match \nwith exon annotation')) +
+    theme_light()
+
+
+# plot the distribution of sgRNA - gene symbol after re-validation alignment
+# gene_df_mismatch %>%
+#   select(gene, notes) %>%
+#   count(gene, notes) %>%
+#   dplyr::rename('num_sgrna' = 'n') %>%
+#   arrange(gene, num_sgrna) %>%
+#   ggplot(aes(x = gene, y = num_sgrna, fill = notes)) +
+#   geom_col(color = 'white') +
+#   labs(
+#     title = paste('Distribution of corrected sgRNA - gene symbol after sanity check alignment'),
+#     x = '',
+#     y = 'Number of sgRNAs') +
+#   geom_text(aes(label = num_sgrna, group = notes),  position = position_stack(vjust = 0.5)) +
+#   theme_light() +
+#   scale_fill_manual(values=c('lightgreen', 'powderblue')) +
+#   theme(axis.text.x = element_text(vjust = 0.5, hjust = 0.5, angle = 45))
 
 
 ```
@@ -728,7 +755,7 @@ sgRNAs_not_target_exon <- sgRNA_library %>%
 **Adding data from HGNC for annotated sgRNA data**
 
 ```{r Add HGNC annotation of sgRNA library}
-hgnc <- import_hgnc_dataset()
+hgnc <- read_tsv(url('https://storage.googleapis.com/public-download-files/hgnc/tsv/tsv/hgnc_complete_set.txt'))
 
 hgnc_selected <- hgnc %>%
   select(symbol, name, locus_group, locus_type) %>%
@@ -786,7 +813,7 @@ kable(df_count)
 ```{r Obtain refined sgRNA library, echo = FALSE}
 
 sgRNA_library_cleaned <- sgRNA_library_gene_df_annot %>%
-  select(sgrna, gene, spacer) %>%
+  select(sgrna, spacer, gene) %>%
   distinct() %>%
   dplyr::rename('sgRNA' = 'sgrna')
 
@@ -893,102 +920,26 @@ crosscheck_count <- sgRNA_library_cleaned %>%
                                  `total sgRNA in cleaned library`)) %>%
   relocate(`number match`, .after = `total sgRNA in cleaned library`)
 
-
 ```
 
 ## Export the refined library and sgRNA cleaning report
 
--   Export cleaned sgRNA library (CSV file)
+-   Combined refined control with original dataframe
+-   Export cleaned sgRNA library (TSV file)
 -   Export total sgRNA or gene lost (Excel file)
 
-```{r Export cleaned sgRNA library}
+```{r Add control sgRNA and export cleaned sgRNA library}
 
-sgRNA_library_cleaned <- sgRNA_library_cleaned[, c('sgRNA', 'spacer', 'gene')]
+# Add control sgRNA (sgRNA_library_control)
+sgRNA_library_refined <- rbind(sgRNA_library_control, sgRNA_library_cleaned)
 
-# value <- paste0(round(length(sgRNA_library_cleaned) / 1000, digits = 0), 'K')
+# Export refined sgRNA library
+value <- paste0(round(length(sgRNA_library_refined$sgRNA) / 1000, digits = 0), 'K')
+write_tsv(sgRNA_library_refined, 
+          file = paste('./output_cleaning/', sgRNA_library_selected, '_', value, '_refined.tsv', sep = ''), col_names = FALSE)
 
-write_csv(sgRNA_library_cleaned, 
-          file = paste('./object_intermediate/', sgRNA_library_selected, '_cleaned_without_control.csv', sep = ''))
-
-write.xlsx(`total sgRNA or gene lost`, file = paste('./object_intermediate/', sgRNA_library_selected, '_cleaned_report.xlsx', sep = ''), row.names = FALSE)
-
-
-```
-
-**Plot multi-target sgRNAs** 
-[Not available at the moment]{style="color:red"}
-
-```{r, include = FALSE, eval = FALSE, echo = FALSE}
-
-read_counts_from_mageck <- '../MAGeCK_analysis/mageck_count_corrected/cellecta_150K_corrected_count_df.txt'
-top_multi_sgrna_num <- 10
-
-multi_target_guides <- `[multi-target sgRNA] count dropped guides per gene` %>%
-    dplyr::rename('Frequency of alignments' = 'Frequency') %>%
-    dplyr::rename('Target Gene' = 'gene') %>%
-    filter(`Frequency of alignments` > 1) %>%
-    arrange(desc(`Frequency of alignments`)) %>%
-    top_n(n = top_multi_sgrna_num)
-
-sgRNA_read_counts <- read.table(read_counts_from_mageck, header = TRUE)
-sgRNA_read_counts <- sgRNA_read_counts %>%
-  select(-DAY24_XL413) %>%
-  filter(sgRNA %in% `[multi-target sgRNA] list guides`)
-
-ggplot_data <- sgRNA_read_counts %>%
-  filter(sgRNA %in% multi_target_guides$sgRNA) %>%
-  left_join(multi_target_guides, by = 'sgRNA') %>%
-  mutate(sgRNA = paste(sgRNA, ' (', `Frequency of alignments`, ' alignments)', sep ='')) %>%
-  select(-`Frequency of alignments`) %>%
-  pivot_longer(cols=c('DAY0_CNTR', 'DAY20_DMSO'),
-               names_to='experiment',
-               values_to='sgRNA_count')
-
-final_plot <- ggplot_data %>%
-  ggplot(aes(experiment, sgRNA_count, color=sgRNA, group=sgRNA)) +
-  geom_point(size = 2, shape=16) +
-  geom_line(linewidth = 1) +
-  labs(x = 'Experiment',
-       y = 'sgRNA Count',
-       title = paste('Top ', top_multi_sgrna_num, ' multi-target sgRNAs in ', sgRNA_library_selected, ' library', sep=''),
-       color = 'sgRNA') +
-  scale_x_discrete(labels = c('DAY0_CNTR' = 'Control \nDay 0', 
-                              'DAY20_DMSO' = 'Untreated \nDay 20')) +
-  theme_minimal() +
-  theme(plot.title = element_text(hjust = 0.3, face = 'bold', size = 18),
-        plot.subtitle = element_text(hjust = 0.5, face = 'bold', size = 0),
-        axis.title.x = element_text(vjust = 0.5, size = 15, face = 'bold'),
-        axis.title.y = element_text(hjust = 0.5, vjust = 2, size = 15, face = 'bold'),
-        axis.text.x = element_text(face = 'bold', size = 15),
-        axis.text.y = element_text(face = 'bold', size = 15),
-        legend.text = element_text(size = 11),
-        legend.title = element_text(size = 13),
-        panel.grid.minor.x = element_blank(),
-        legend.position = c(0.8, 0.6))
-        # legend.position = 'none')) +
-  # geom_dl(aes(label = sgRNA), 
-  #         method = list(dl.trans(x = x - 0.3), 'first.points', cex = 1.2))
-
-ggsave(
-  path = 'plot/',
-  plot = final_plot,
-  width = 10, 
-  height = 10, 
-  dpi = 500,
-  filename = paste(sgRNA_library_selected, '-multi-target-guides.png', sep=''))
-
-final_plot
-
-```
-
-**Export total sgRNA lost per gene into a csv file** 
-[Not available at the moment]{style="color:red"}
-
-```{r, echo=FALSE, eval=FALSE}
-
-write_csv(`total sgRNA lost per gene`, file = paste('./output_cleaning/', sgRNA_library_selected, '_total_sgRNA_lost_per_gene.csv', sep = ''))
-
-write_csv(`total sgRNA or gene lost`, file = paste('./output_cleaning/', sgRNA_library_selected, '_total_sgRNA_or_gene_lost.csv', sep = ''))
+write.xlsx(`total sgRNA or gene lost`, file = paste('./output_cleaning/', sgRNA_library_selected, '_cleaned_report.xlsx', sep = ''), row.names = FALSE)
 
 
 ```
+

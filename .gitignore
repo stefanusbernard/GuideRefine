@@ -2,3 +2,6 @@
 *.ebwt
 *.fa.gz
 *.tsv
+*.txt
+*.html
+*.xlsx
