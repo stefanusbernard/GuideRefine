@@ -23,10 +23,8 @@ Clean sgRNA library from sgRNA with off-target activity
 ## Materials and Methods
 
 ### Materials
-
-1.  sgRNA library Cellecta 150K
+1.  sgRNA library TSV file input for MAGeCK (Format: sgRNA, spacer, gene; without header)
 2.  Human genome GRCh38 indexed in bowtie
-3.  Laptop connected to internet
 
 ### Methods
 
@@ -111,9 +109,9 @@ library(xlsx)
 
 ```
 
-## Define any filename
+## User defined variable
 
-```{r Define any filename (User input)}
+```{r User defined variable (User input)}
 
 sgRNA_library_selected <- 'sample_M1_150K'
 control <- c('Neg_Control', 'INTRON_CTRL')
@@ -478,9 +476,8 @@ sgRNA_library_control <- library_alignment %>%
   select(sgRNA, gene, spacer) %>%
   distinct()
 
-
-
-
+library_alignment <- library_alignment %>%
+  filter(gene %notin% control)
 
 ```
 
