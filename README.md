@@ -3,6 +3,9 @@ a tool (R Markdown) developed to clean the CRISPR sgRNA library from:
 - suspected multi-target sgRNAs
 - off-target sgRNAs (align with single mismatch or double mismatch at the PAM distal site)
 
+This tool is an adapted version of script developed by Barbara & Ryan, 2019
+https://pubmed.ncbi.nlm.nih.gov/31652272/
+
 Input file:
 1.  sgRNA library TSV file input for MAGeCK (Format: sgRNA, spacer, gene; without header)
 2.  Human genome GRCh38 indexed in bowtie
