@@ -877,13 +877,22 @@ kable(df_count)
 
 ```
 
+## Combined the control sgRNA back with the original dataframe
+
+```{r Combine the control sgRNA back with the original dataframe}	
+
+# Add control sgRNA (sgRNA_library_control)
+sgRNA_library_refined <- rbind(sgRNA_library_control, sgRNA_library_cleaned)
+
+```
+
 # Result
 
 ## Calculate total sgRNAs and genes lost
 
 ```{r Calculate total sgRNAs and genes lost}
 
-`total sgRNA or gene lost` <- data.frame('gene' = sgRNA_library$gene) %>%
+total_sgRNA_or_gene_lost <- data.frame('gene' = sgRNA_library$gene) %>%
   count(gene) %>%
   dplyr::rename('sgRNA number' = 'n') %>%
   left_join(`dropped due to [multi-target]`, by = 'gene') %>%
@@ -895,50 +904,46 @@ kable(df_count)
   left_join(sgRNAs_not_target_exon, by = 'gene') %>%
   mutate(`sgRNA not target exon` = replace_na(`sgRNA not target exon`, 0)) %>%
   mutate(
-    `total sgRNA` = `sgRNA number` - (`multi-target sgRNA` + `single mismatch sgRNA` + `PAM distal double mismatch` + `sgRNA not target exon`)) %>%
+    `counted total sgRNA` = `sgRNA number` - (`multi-target sgRNA` + `single mismatch sgRNA` + `PAM distal double mismatch` + `sgRNA not target exon`)) %>%
   mutate(`symbol change` = case_when(gene %in% gene_track_annotation$old_gene ~
                                        gene_track_annotation$gene[match(gene, gene_track_annotation$old_gene)],
                                         TRUE ~ 'no')) %>%
   mutate(`protein-coding gene` = case_when(gene %in% c('Neg_Control', 'INTRON_CTRL') ~ 'no',
                                            gene %in% genes_not_pcg ~ 'no',
-                                           TRUE ~ 'yes')) %>%
-  mutate(`quality check` = case_when((`symbol change` != 'no') ~ 'not counted (symbol change)',
-                                     (`total sgRNA` > 2 & `protein-coding gene` == 'yes') ~ 'pass',
-                                     TRUE ~ 'fail'))
+                                           TRUE ~ 'yes'))
 
-
-crosscheck_count <- sgRNA_library_cleaned %>%
+crosscheck_count <- sgRNA_library_refined %>%
   count(gene) %>%
-  dplyr::rename('total sgRNA in cleaned library' = 'n')
+  dplyr::rename('actual total sgRNA' = 'n')
 
-`total sgRNA or gene` <- `total sgRNA or gene lost` %>%
+total_sgRNA_or_gene <- total_sgRNA_or_gene_lost %>%
   left_join(crosscheck_count, by = join_by(gene)) %>%
-  mutate(`total sgRNA in cleaned library` = replace_na(`total sgRNA in cleaned library`, 0)) %>%
-  relocate(`total sgRNA in cleaned library`, .after = `total sgRNA`) %>%
+  mutate(`actual total sgRNA` = replace_na(`actual total sgRNA`, 0)) %>%
+  relocate(`actual total sgRNA`, .after = `counted total sgRNA`) %>%
   mutate(`number match` = mapply(identical,                 
-                                 `total sgRNA`, 
-                                 `total sgRNA in cleaned library`)) %>%
-  relocate(`number match`, .after = `total sgRNA in cleaned library`)
+                                 `counted total sgRNA`, 
+                                 `actual total sgRNA`)) %>%
+  relocate(`number match`, .after = `actual total sgRNA`) %>%
+  mutate(`quality check` = case_when((`symbol change` != 'no') ~ 'not counted (symbol change)',
+                                     (`actual total sgRNA` > 2 & `protein-coding gene` == 'yes') ~ 'pass',
+                                     TRUE ~ 'fail')) %>%
+  mutate(`quality check` = ifelse(gene %in% control, 'pass', `quality check`)) %>%
+  arrange(factor(gene, levels = c(control, setdiff(unique(gene), control))))
 
 ```
 
 ## Export the refined library and sgRNA cleaning report
-
--   Combined refined control with original dataframe
 -   Export cleaned sgRNA library (TSV file)
 -   Export total sgRNA or gene lost (Excel file)
 
-```{r Add control sgRNA and export cleaned sgRNA library}
-
-# Add control sgRNA (sgRNA_library_control)
-sgRNA_library_refined <- rbind(sgRNA_library_control, sgRNA_library_cleaned)
+```{r Export cleaned sgRNA library}
 
 # Export refined sgRNA library
 value <- paste0(round(length(sgRNA_library_refined$sgRNA) / 1000, digits = 0), 'K')
 write_tsv(sgRNA_library_refined, 
           file = paste('./output_cleaning/', sgRNA_library_selected, '_', value, '_refined.tsv', sep = ''), col_names = FALSE)
 
-write.xlsx(`total sgRNA or gene lost`, file = paste('./output_cleaning/', sgRNA_library_selected, '_cleaned_report.xlsx', sep = ''), row.names = FALSE)
+write.xlsx(total_sgRNA_or_gene, file = paste('./output_cleaning/', sgRNA_library_selected, '_cleaned_report.xlsx', sep = ''), row.names = FALSE)
 
 
 ```
