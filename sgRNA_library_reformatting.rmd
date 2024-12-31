@@ -1,20 +1,34 @@
 ---
-title: "Real-time theming with bslib and thematic"
-runtime: shiny
+title: "Reformatting Publicly Available sgRNA Library to be Compatible with MAGeCK input"
+author: "Author: Stefanus Bernard"
+date: "Date: `r format(Sys.time(), '%d %B %Y')`"
 output: 
-  html_document:
-    code_folding: show
-    theme:
-      color-contrast-warnings: false
-      bg: "#202123"
-      fg: "#B8BCC2"
-      primary: "#EA80FC"
-      secondary: "#00DAC6"
-      base_font:
-        google: Prompt
-      heading_font:
-        google: Proza Libre
+  html_document :
+    theme : cerulean
+    toc : true
+    toc_float : true
+    number_section : true
 ---
+
+## Input data
+1. sgRNA library TSV file input for MAGeCK (Format: sgRNA, spacer, gene; without header)
+
+## Methods
+
+1.  Import required packages
+2.  Define any filename
+3.  Import sgRNA library and create dir for output (output_cleaning) and intermediate files (object_intermediate)
+4.  Alignment of sgRNA to HG38 UCSC using Bowtie2 (2 mismatches)
+5.  Post alignment data processing
+6.  Find and drop multi-target sgRNAs
+7.  Find and drop single mismatch sgRNAs
+8.  Find and drop sgRNA align with double mismatches at the PAM distal nucleotides
+9.  CCDS annotation of sgRNA library
+10. HGNC annotation of sgRNA library
+11. Clean sgRNA library
+12. Discard any genes targeted by less than 3 sgRNAs
+13. Calculate how many sgRNAs or genes lost
+14. Export the refined sgRNA library TSV file and excel file report
 
 ```{r setup, include=FALSE}
 

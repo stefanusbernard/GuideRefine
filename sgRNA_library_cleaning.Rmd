@@ -1,5 +1,5 @@
 ---
-title: "sgRNA Library Refinement Pipeline"
+title: "sgRNA Library Cleaning Pipeline"
 author: "Author: Stefanus Bernard; small adaptation from Barbara & Ryan (2019)"
 date: "Date: `r format(Sys.time(), '%d %B %Y')`"
 output: 
@@ -16,6 +16,9 @@ output:
 1. sgRNA library TSV file input for MAGeCK (Format: sgRNA, spacer, gene; without header)
 2. Human genome GRCh38 indexed in bowtie
 3. CCDS annotation file. Look for the current release here: https://ftp.ncbi.nlm.nih.gov/pub/CCDS/current_human/
+4. HGNC (Hugo Gene Nomenclature Committee) annotation file. Look for the current release here: https://www.genenames.org/download/custom/
+
+The current HGNC dataset were retrieved from https://storage.googleapis.com/public-download-files/hgnc/tsv/tsv/hgnc_complete_set.txt
 
 ## Methods
 
