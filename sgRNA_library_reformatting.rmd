@@ -35,18 +35,48 @@ hgnc_gene <- hgnc['symbol']
 ## Detected file input
 **This code will detect any raw sgRNA library file in public_crispr_library directory**
 
+```{r Function to detect Gene symbol and Sequence column, include=FALSE} 
+
+function_detect_gene_and_sequence_col <- function(df, hgnc_symbol) {
+  # detect sgRNA 20 nucleotide sequence based on the average number length of characters in each column
+  average_char_length <- sapply(df, function(col) {
+    mean(nchar(as.character(col)), na.rm = TRUE)
+    })
+  sequence_column <- colnames(df)[which(average_char_length == 20)]
+
+  # detect gene symbol column based on the sampling of 30 rows of dataset and crossmatching with gene symbol column
+  df_sample <- head(df, n = 30)
+  matches <- sapply(df_sample, function(col) {
+    any(col %in% hgnc_symbol)
+  })
+  gene_column <- colnames(df_sample)[which(matches == TRUE)]
+
+  fetch_this_column <- c(gene_column, sequence_column)
+  return(fetch_this_column)
+}
+
+brunello <- read_tsv('./public_crispr_library/brunello.txt')
+gecko <- read_csv('public_crispr_library/human_geckov2_library_a_09mar2015.csv')
+
+
+function_detect_gene_and_sequence_col(brunello, hgnc_gene$symbol)
+function_detect_gene_and_sequence_col(gecko, hgnc_gene$symbol)
+
+```
+
 ```{r Function to clean any txt CRISPR library, include=FALSE}
 
-function_clean_txt <- function(filename) {
+function_clean_txt <- function(filename, hgnc_symbol) {
   df <- read_tsv(filename)
   colnames(df)
-  terms = c('Gene Symbol', 'gene symbol', 'Sequence', 'sequence', 'Gene', 'gene')
-  df <- df %>% select(contains(terms))
-  return(df)
+
+
 }
 
 test <- function_clean_txt('public_crispr_library/brunello.txt')
 test
+
+
 
 ```
 
