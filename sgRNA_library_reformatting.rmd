@@ -1,5 +1,5 @@
 ---
-title: "Reformatting Publicly Available sgRNA Library to be Compatible with MAGeCK input"
+title: "Reformatting Publicly Available sgRNA Library for MAGeCK input"
 author: "Author: Stefanus Bernard"
 date: "Date: `r format(Sys.time(), '%d %B %Y')`"
 output: 
@@ -11,25 +11,68 @@ output:
 ---
 
 ## Input data
-1. sgRNA library TSV file input for MAGeCK (Format: sgRNA, spacer, gene; without header)
+1. Publicly available CRISPR knockout sgRNA library downloaded from https://www.addgene.org/crispr/libraries/
 
 ## Methods
 
 1.  Import required packages
-2.  Define any filename
-3.  Import sgRNA library and create dir for output (output_cleaning) and intermediate files (object_intermediate)
-4.  Alignment of sgRNA to HG38 UCSC using Bowtie2 (2 mismatches)
-5.  Post alignment data processing
-6.  Find and drop multi-target sgRNAs
-7.  Find and drop single mismatch sgRNAs
-8.  Find and drop sgRNA align with double mismatches at the PAM distal nucleotides
-9.  CCDS annotation of sgRNA library
-10. HGNC annotation of sgRNA library
-11. Clean sgRNA library
-12. Discard any genes targeted by less than 3 sgRNAs
-13. Calculate how many sgRNAs or genes lost
-14. Export the refined sgRNA library TSV file and excel file report
+2.  Define file input
+3.  
 
 ```{r setup, include=FALSE}
 
+library(tidyverse)
+
 ```
+
+````{r Import HGNC dataset, include=FALSE}
+
+hgnc <- read_tsv(url('https://storage.googleapis.com/public-download-files/hgnc/tsv/tsv/hgnc_complete_set.txt'))
+hgnc_gene <- hgnc['symbol']
+
+```
+
+## Detected file input
+**This code will detect any raw sgRNA library file in public_crispr_library directory**
+
+```{r Function to clean any txt CRISPR library, include=FALSE}
+
+function_clean_txt <- function(filename) {
+  df <- read_tsv(filename)
+  colnames(df)
+  terms = c('Gene Symbol', 'gene symbol', 'Sequence', 'sequence', 'Gene', 'gene')
+  df <- df %>% select(contains(terms))
+  return(df)
+}
+
+test <- function_clean_txt('public_crispr_library/brunello.txt')
+test
+
+```
+
+```{r Iterate to all files in public_crispr_library directory, include=FALSE}
+
+for (file in dir(path = './public_crispr_library')) {
+  if (grepl("\\.txt$", file)) {
+    print(paste("Detected txt file:", file))
+  } else if (grepl("\\.csv$", file)) {
+    print(paste("Detected csv file:", file))
+  }
+}
+
+```
+
+
+
+
+
+```{r setup, include=FALSE}
+
+sgRNA_library_selected <- 'sample_M1_150K'
+control <- c('Neg_Control', 'INTRON_CTRL')
+
+paste('sgRNA library name:', sgRNA_library_selected)
+paste('control sgRNA:', as.character(control))
+
+```
+
