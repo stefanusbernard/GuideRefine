@@ -16,8 +16,12 @@ output:
 ## Methods
 
 1.  Import required packages
-2.  Define file input
-3.  
+2.  Import HGNC dataset
+3.  Specify the directory of sgRNA library file
+4.  Function to detect Gene symbol and Sequence column
+5.  Function to re-format the sgRNA library according to MAGeCK input
+6.  Function to export the table according to MAGeCK input TSV format
+7.  Iterate to all files in public_crispr_library directory
 
 ```{r setup, include=FALSE}
 
@@ -28,7 +32,13 @@ library(tidyverse)
 ````{r Import HGNC dataset, include=FALSE}
 
 hgnc <- read_tsv(url('https://storage.googleapis.com/public-download-files/hgnc/tsv/tsv/hgnc_complete_set.txt'))
-hgnc_gene <- hgnc['symbol']
+hgnc_gene <- hgnc$symbol
+
+```
+
+```{r Specify the directory where you put the sgRNA library file}
+
+crispr_library_dir = './public_crispr_library/'
 
 ```
 
@@ -37,72 +47,77 @@ hgnc_gene <- hgnc['symbol']
 
 ```{r Function to detect Gene symbol and Sequence column, include=FALSE} 
 
-function_detect_gene_and_sequence_col <- function(df, hgnc_symbol) {
+function_detect_gene_and_sequence_col <- function(library_table, hgnc_symbol) {
   # detect sgRNA 20 nucleotide sequence based on the average number length of characters in each column
-  average_char_length <- sapply(df, function(col) {
+  average_char_length <- sapply(library_table, function(col) {
     mean(nchar(as.character(col)), na.rm = TRUE)
     })
-  sequence_column <- colnames(df)[which(average_char_length == 20)]
+  sequence_column <- colnames(library_table)[which(average_char_length == 20)]
 
   # detect gene symbol column based on the sampling of 30 rows of dataset and crossmatching with gene symbol column
-  df_sample <- head(df, n = 30)
-  matches <- sapply(df_sample, function(col) {
+  library_table_sample <- head(library_table, n = 30)
+  matches <- sapply(library_table_sample, function(col) {
     any(col %in% hgnc_symbol)
   })
-  gene_column <- colnames(df_sample)[which(matches == TRUE)]
+  gene_column <- colnames(library_table_sample)[which(matches == TRUE)]
 
   fetch_this_column <- c(gene_column, sequence_column)
   return(fetch_this_column)
 }
 
-brunello <- read_tsv('./public_crispr_library/brunello.txt')
-gecko <- read_csv('public_crispr_library/human_geckov2_library_a_09mar2015.csv')
-
-
-function_detect_gene_and_sequence_col(brunello, hgnc_gene$symbol)
-function_detect_gene_and_sequence_col(gecko, hgnc_gene$symbol)
-
 ```
 
-```{r Function to clean any txt CRISPR library, include=FALSE}
+```{r Function to re-format the sgRNA library according to MAGeCK input, include=FALSE}
 
-function_clean_txt <- function(filename, hgnc_symbol) {
-  df <- read_tsv(filename)
-  colnames(df)
+`%notin%` <- Negate(`%in%`)
 
+function_reformat_sgrna_library <- function(imported_library_table, detected_sgRNA_gene_column) {
+  library_table <- imported_library_table %>%
+    select(all_of(detected_sgRNA_gene_column)) %>%
+    dplyr::rename(gene = !!sym(detected_sgRNA_gene_column[1]),
+                  sequence = !!sym(detected_sgRNA_gene_column[2]))
 
+  run_length <- rle(library_table$gene)$lengths
+  sequential_number <- sequence(run_length)
+
+  processed_library_table <- library_table %>%
+    mutate(sgRNA = paste('sg', gene, '_', sequential_number, sep = '')) %>%
+    dplyr::relocate(sgRNA, .before = gene) %>%
+    dplyr::relocate(gene, .after = sequence)
+
+  return(processed_library_table)
 }
 
-test <- function_clean_txt('public_crispr_library/brunello.txt')
-test
+```
 
+```{r Function to export the table according to MAGeCK input TSV format}
 
+function_export_table <- function(library_table, filename) {
+  write_tsv(library_table, filename, col_names = FALSE)
+}
 
 ```
+
 
 ```{r Iterate to all files in public_crispr_library directory, include=FALSE}
 
-for (file in dir(path = './public_crispr_library')) {
+for (file in dir(path = crispr_library_dir)) {
   if (grepl("\\.txt$", file)) {
-    print(paste("Detected txt file:", file))
+    print(paste("Processing:", file))
+    exported_filename <- sub("\\..*$", "", file)
+    sgRNA_library <- read_tsv(paste(crispr_library_dir, file, sep = ''))
+    sgRNA_and_sequence_column <- function_detect_gene_and_sequence_col(sgRNA_library, hgnc_gene)
+    MAGeCK_format_sgRNA_library <- function_reformat_sgrna_library(sgRNA_library, sgRNA_and_sequence_column)
+    function_export_table(MAGeCK_format_sgRNA_library, filename = paste(crispr_library_dir, exported_filename, '.tsv', sep = ''))
+
   } else if (grepl("\\.csv$", file)) {
-    print(paste("Detected csv file:", file))
+    print(paste("Processing:", file))
+    exported_filename <- sub("\\..*$", "", file)
+    sgRNA_library <- read_csv(paste(crispr_library_dir, file, sep = ''))
+    sgRNA_and_sequence_column <- function_detect_gene_and_sequence_col(sgRNA_library, hgnc_gene)
+    MAGeCK_format_sgRNA_library <- function_reformat_sgrna_library(sgRNA_library, sgRNA_and_sequence_column)
+    function_export_table(MAGeCK_format_sgRNA_library, filename = paste(crispr_library_dir, exported_filename, '.tsv', sep = ''))
   }
 }
 
 ```
-
-
-
-
-
-```{r setup, include=FALSE}
-
-sgRNA_library_selected <- 'sample_M1_150K'
-control <- c('Neg_Control', 'INTRON_CTRL')
-
-paste('sgRNA library name:', sgRNA_library_selected)
-paste('control sgRNA:', as.character(control))
-
-```
-

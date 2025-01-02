@@ -84,7 +84,7 @@ library(xlsx)
 ```{r User defined variable (User input), echo = FALSE}
 
 sgRNA_library_selected <- 'sample_M1_150K'
-control <- c('Neg_Control', 'INTRON_CTRL')
+
 ccds_filename <- 'CCDS_20240128.txt'
 
 aln_2_mismatch_filename <- paste(sgRNA_library_selected, '_aln.csv', sep ='')
@@ -425,9 +425,13 @@ kable(df_count)
 
 ```{r Separate control sgRNA with the rest of sgRNA, include = FALSE}
 
+# detect any control sgRNA
+terms <- c('Control', 'control', 'ctrl', 'CTRL')
+terms_for_filtering <- paste(terms, collapse = '|')
+
 # separate control sgRNA from the rest of sgRNA
 sgRNA_library_control <- library_alignment %>%
-  filter(gene %in% control) %>%
+  filter(str_detect(gene, terms_for_filtering)) %>%
   select(sgRNA, spacer, gene) %>%
   distinct()
 
