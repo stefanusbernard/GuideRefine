@@ -3,11 +3,12 @@ title: "sgRNA Library Cleaning Pipeline"
 author: "Author: Stefanus Bernard; small adaptation from Barbara & Ryan (2019)"
 date: "Date: `r format(Sys.time(), '%d %B %Y')`"
 output: 
-  html_document :
-    theme : cerulean
-    toc : true
-    toc_float : true
-    number_section : true
+    html_document:
+      theme: cerulean
+      toc: true
+      toc_float: true
+      number_sections: true
+      self_contained: true
 ---
 
 # Input data and Methods
@@ -84,14 +85,13 @@ library(xlsx)
 ```{r User defined variable (User input), echo = FALSE}
 
 file_dir_location <- './public_crispr_library/'
-sgRNA_library_selected <- 'broadgpp-brunello-library-contents'
+sgRNA_library_selected <- 'tkov3_guide_sequence'
 
 ccds_filename <- 'CCDS_20240128.txt'
 
 aln_2_mismatch_filename <- paste(sgRNA_library_selected, '_aln.csv', sep ='')
 
 paste('sgRNA library name:', sgRNA_library_selected)
-paste('control sgRNA:', as.character(control))
 paste('CCDS filename:', ccds_filename)
 paste('Alignmment with 2 mismatch filename (csv format):', aln_2_mismatch_filename)
 
@@ -427,7 +427,7 @@ kable(df_count)
 ```{r Separate control sgRNA with the rest of sgRNA, include = FALSE}
 
 # detect any control sgRNA
-terms <- c('Control', 'control', 'ctrl', 'CTRL')
+terms <- c('Control', 'control', 'ctrl')
 terms_for_filtering <- paste(terms, collapse = '|')
 
 # separate control sgRNA from the rest of sgRNA
@@ -438,7 +438,7 @@ sgRNA_library_control <- library_alignment %>%
 
 # filter gene not in control and drop sgRNAs not targeting anywhere
 library_alignment <- library_alignment %>%
-  filter(gene %notin% control) %>%
+  filter(gene %notin% unique(sgRNA_library_control$gene)) %>%
   drop_na()
 
 ```
@@ -877,8 +877,8 @@ total_sgRNA_or_gene <- total_sgRNA_or_gene_lost %>%
   mutate(`quality check` = case_when((`symbol change` != 'no') ~ 'not counted (symbol change)',
                                      (`actual total sgRNA` > 2 & `protein-coding gene` == 'yes') ~ 'pass',
                                      TRUE ~ 'fail')) %>%
-  mutate(`quality check` = ifelse(gene %in% control, 'pass', `quality check`)) %>%
-  arrange(factor(gene, levels = c(control, setdiff(unique(gene), control))))
+  mutate(`quality check` = ifelse(gene %in% unique(sgRNA_library_control$gene), 'pass', `quality check`)) %>%
+  arrange(factor(gene, levels = c(unique(sgRNA_library_control$gene), setdiff(unique(gene), unique(sgRNA_library_control$gene)))))
 
 ```
 
