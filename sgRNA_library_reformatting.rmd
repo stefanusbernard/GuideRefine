@@ -26,6 +26,7 @@ output:
 ```{r setup, include=FALSE}
 
 library(tidyverse)
+library(readxl)
 
 ```
 
@@ -117,7 +118,16 @@ for (file in dir(path = crispr_library_dir)) {
     sgRNA_and_sequence_column <- function_detect_gene_and_sequence_col(sgRNA_library, hgnc_gene)
     MAGeCK_format_sgRNA_library <- function_reformat_sgrna_library(sgRNA_library, sgRNA_and_sequence_column)
     function_export_table(MAGeCK_format_sgRNA_library, filename = paste(crispr_library_dir, exported_filename, '.tsv', sep = ''))
+  
+  } else if (grepl("\\.xlsx$", file)) {
+    print(paste("Processing:", file))
+    exported_filename <- sub("\\..*$", "", file)
+    sgRNA_library <- read_excel(paste(crispr_library_dir, file, sep = ''))
+    sgRNA_and_sequence_column <- function_detect_gene_and_sequence_col(sgRNA_library, hgnc_gene)
+    MAGeCK_format_sgRNA_library <- function_reformat_sgrna_library(sgRNA_library, sgRNA_and_sequence_column)
+    function_export_table(MAGeCK_format_sgRNA_library, filename = paste(crispr_library_dir, exported_filename, '.tsv', sep = ''))
   }
+
 }
 
 ```
