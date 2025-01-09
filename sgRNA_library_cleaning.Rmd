@@ -83,7 +83,8 @@ library(xlsx)
 
 ```{r User defined variable (User input), echo = FALSE}
 
-sgRNA_library_selected <- 'sample_M1_150K'
+file_dir_location <- './public_crispr_library/'
+sgRNA_library_selected <- 'broadgpp-brunello-library-contents'
 
 ccds_filename <- 'CCDS_20240128.txt'
 
@@ -99,7 +100,7 @@ paste('Alignmment with 2 mismatch filename (csv format):', aln_2_mismatch_filena
 ```{r Create folder and import library cellecta, include = FALSE}
 dir.create('output_cleaning')
 dir.create('object_intermediate')
-sgRNA_library <- read_tsv(paste(sgRNA_library_selected, '.tsv', sep = ''), col_names = FALSE)
+sgRNA_library <- read_tsv(paste(file_dir_location, sgRNA_library_selected, '.tsv', sep = ''), col_names = FALSE)
 colnames(sgRNA_library) <- c('sgRNA', 'spacer', 'gene')
 
 ```
