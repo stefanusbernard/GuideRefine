@@ -12,7 +12,11 @@ Input file:
 3.  CCDS annotation; obtained from https://ftp.ncbi.nlm.nih.gov/pub/CCDS/ (pick current_human/CCDS.current.txt, depending on the updated version, the one used for this analysis was released in 12th January 2025)
 4.  HGNC dataset; obtained from https://storage.googleapis.com/public-download-files/hgnc/tsv/tsv/hgnc_complete_set.txt
 
+*for latest HGNC dataset you can change the link in line 711
+
+`hgnc <- read_tsv(url('https://storage.googleapis.com/public-download-files/hgnc/tsv/tsv/hgnc_complete_set.txt'))`
+
 Output file:
-1. Refined sgRNA library
+1. Refined sgRNA library formatted according to MAGeCK input (sgRNA, spacer, gene; without header)
 2. HTML report from R Markdown
 3. Excel report containing sgRNAs targeting each genes
