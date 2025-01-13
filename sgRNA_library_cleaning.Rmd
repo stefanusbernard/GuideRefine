@@ -85,7 +85,7 @@ library(xlsx)
 ```{r User defined variable (User input), echo = FALSE}
 
 file_dir_location <- './public_crispr_library/'
-sgRNA_library_selected <- 'broadgpp-brunello-library-contents'
+sgRNA_library_selected <- 'tkov3_guide_sequence'
 
 ccds_filename <- 'CCDS_20250112.txt'
 
@@ -738,8 +738,11 @@ genes_not_pcg_df <- sgRNA_library_gene_df %>%#
 **sgRNAs lost at this stage means that the sgRNA is not targeting a protein-coding genes**
 
 sgRNAs might target:
+
 -   Readthrough gene
+
 -   Complex locus constituent
+
 -   Pseudogene
 
 ```{r Selected only protein-coding genes, echo = FALSE}
