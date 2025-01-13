@@ -85,9 +85,9 @@ library(xlsx)
 ```{r User defined variable (User input), echo = FALSE}
 
 file_dir_location <- './public_crispr_library/'
-sgRNA_library_selected <- 'tkov3_guide_sequence'
+sgRNA_library_selected <- 'broadgpp-brunello-library-contents'
 
-ccds_filename <- 'CCDS_20240128.txt'
+ccds_filename <- 'CCDS_20250112.txt'
 
 aln_2_mismatch_filename <- paste(sgRNA_library_selected, '_aln.csv', sep ='')
 
@@ -117,9 +117,9 @@ file_test('-f', paste('bowtie_index/', check_index_file, sep='')) # returns TRUE
 ```{r Indexing HG38 if indexing have not been done previously, include = FALSE}
 if (file_test('-f', paste('bowtie_index/', check_index_file, sep='')) == FALSE) {
   bowtie_build(fastaFile,
-               outdir="./bowtie2_index",
-               force=TRUE,
-               prefix='hg38')
+               outdir = "./bowtie2_index",
+               force = TRUE,
+               prefix = 'hg38')
 } else {
   print(paste(check_index_file, 'is in bowtie_index directory, indicating HG38 indexing by bowtie have been done previously'))
 }
@@ -253,7 +253,8 @@ gene_original <- setdiff(gene_original, genes_lost_multi_target_sgrna)
 
 ```{r Genes lost due to multi-target sgRNAs, echo = FALSE}
 
-genes_lost_multi_target_sgrna
+print(paste('Number of genes lost due to multi-target sgRNAs: ', length(genes_lost_multi_target_sgrna), sep = ''))
+# print(genes_lost_multi_target_sgrna)
 
 ```
 
@@ -303,7 +304,8 @@ gene_original <- setdiff(gene_original, genes_lost_single_mismatch_sgrna)
 
 ```{r Genes lost due to single-mismatch sgRNAs, echo = FALSE}
 
-genes_lost_single_mismatch_sgrna
+print(paste('Number of genes lost due to single mismatch sgRNAs: ', length(genes_lost_single_mismatch_sgrna), sep = ''))
+# print(genes_lost_single_mismatch_sgrna)
 
 ```
 
@@ -407,7 +409,8 @@ gene_original <- setdiff(gene_original, genes_lost_pam_mismatch_sgrna)
 
 ```{r Genes lost due to PAM distal double mismatch sgRNAs, echo = FALSE}
 
-genes_lost_pam_mismatch_sgrna
+print(paste('Number of genes lost due to PAM distal double mismatch sgRNAs: ', length(genes_lost_pam_mismatch_sgrna), sep = ''))
+# print(genes_lost_pam_mismatch_sgrna)
 
 ```
 
@@ -424,10 +427,10 @@ df_count <- rbind(df_count,
 kable(df_count)
 ```
 
-```{r Separate control sgRNA with the rest of sgRNA, include = FALSE}
+```{r Separate control or intron control sgRNA with the rest of sgRNA, include = FALSE}
 
-# detect any control sgRNA
-terms <- c('Control', 'control', 'ctrl')
+# detect any control/intron control sgRNA
+terms <- c('CONTROL', 'Control', 'control', 'INTRON', 'Intron', 'intron')
 terms_for_filtering <- paste(terms, collapse = '|')
 
 # separate control sgRNA from the rest of sgRNA
@@ -440,6 +443,9 @@ sgRNA_library_control <- library_alignment %>%
 library_alignment <- library_alignment %>%
   filter(gene %notin% unique(sgRNA_library_control$gene)) %>%
   drop_na()
+
+# detected control sgRNA
+detected_control_sgrna <- unique(sgRNA_library_control$gene)
 
 ```
 
@@ -471,11 +477,11 @@ ccds_exon <- ccds %>%
   dplyr::select(gene, gene_id, chromosome, start=cds_start, end=cds_end, strand=cds_strand,
                 gene_start=cds_from, gene_end=cds_to, exon_code)
 
-genome_info <- GenomeInfoDb::Seqinfo(genome="hg38")[list_chromosome]
+genome_info <- GenomeInfoDb::Seqinfo(genome = "hg38")[list_chromosome]
 
 gene_annot_granges <- ccds_exon %>% 
-  GenomicRanges::makeGRangesFromDataFrame(seqinfo=genome_info, 
-                                          keep.extra.columns=T, 
+  GenomicRanges::makeGRangesFromDataFrame(seqinfo = genome_info, 
+                                          keep.extra.columns = T, 
                                           na.rm = TRUE)
 
 ```
@@ -617,24 +623,6 @@ gene_df_corrected %>%
                               'symbol mismatch' = 'gene symbol not match \nwith exon annotation')) +
     theme_light()
 
-
-# plot the distribution of sgRNA - gene symbol after re-validation alignment
-# gene_df_mismatch %>%
-#   select(gene, notes) %>%
-#   count(gene, notes) %>%
-#   dplyr::rename('num_sgrna' = 'n') %>%
-#   arrange(gene, num_sgrna) %>%
-#   ggplot(aes(x = gene, y = num_sgrna, fill = notes)) +
-#   geom_col(color = 'white') +
-#   labs(
-#     title = paste('Distribution of corrected sgRNA - gene symbol after sanity check alignment'),
-#     x = '',
-#     y = 'Number of sgRNAs') +
-#   geom_text(aes(label = num_sgrna, group = notes),  position = position_stack(vjust = 0.5)) +
-#   theme_light() +
-#   scale_fill_manual(values=c('lightgreen', 'powderblue')) +
-#   theme(axis.text.x = element_text(vjust = 0.5, hjust = 0.5, angle = 45))
-
 ```
 
 ```{r Find genes lost after annotation, include = FALSE}
@@ -665,18 +653,21 @@ gene_original_corrected <- as.character(gene_original_corrected)
 paste('Corrected gene name: ')
 setdiff(gene_original_corrected, gene_original)
 
-genes_lost_after_annotation <- setdiff(gene_original_corrected, unique(gene_df_corrected$gene))
+exclude_control <- c(unique(gene_df_corrected$gene), detected_control_sgrna)
+
+genes_lost_after_annotation <- setdiff(gene_original_corrected, exclude_control)
 gene_original_corrected <- setdiff(gene_original_corrected, genes_lost_after_annotation)
 
 ```
 
 [**Genes lost after annotation**]{style="color:red"}
 
-**sgRNAs lost at this stage means that the sgRNA is not align to anywhere in the genome**
+**Genes lost at this stage means that its sgRNA was not aligned to anywhere in the genome**
 
 ```{r Genes lost after gene annotation, echo = FALSE}
 
-genes_lost_after_annotation
+print(paste('number of genes lost following the annotation: ', length(genes_lost_after_annotation), sep = ''))
+# print(genes_lost_after_annotation)
 
 ```
 
@@ -734,7 +725,8 @@ paste('alignments left after data selection of protein-coding gene only:', lengt
 
 ```{r Find genes failed in the annotation, include = FALSE}
 
-genes_not_pcg <- setdiff(sgRNA_library_gene_df$gene, sgRNA_library_gene_df_annot$gene)
+exclude_control_2 = c(unique(sgRNA_library_gene_df_annot$gene), detected_control_sgrna)
+genes_not_pcg <- setdiff(sgRNA_library_gene_df$gene, exclude_control_2)
 
 genes_not_pcg_df <- sgRNA_library_gene_df %>%#
   filter(gene %in% genes_not_pcg)
@@ -746,13 +738,14 @@ genes_not_pcg_df <- sgRNA_library_gene_df %>%#
 **sgRNAs lost at this stage means that the sgRNA is not targeting a protein-coding genes**
 
 sgRNAs might target:
-1.   readthrough gene
-2.   complex locus constituent
-3.   pseudogene
+-   Readthrough gene
+-   Complex locus constituent
+-   Pseudogene
 
 ```{r Selected only protein-coding genes, echo = FALSE}
 
-genes_not_pcg
+print(paste('number of non protein-coding genes: ', length(genes_not_pcg), sep = ''))
+# print(genes_not_pcg)
 
 ```
 
@@ -900,7 +893,8 @@ value <- paste0(round(length(sgRNA_library_refined$sgRNA) / 1000, digits = 0), '
 write_tsv(sgRNA_library_refined, 
           file = paste('./output_cleaning/', sgRNA_library_selected, '_', value, '_refined.tsv', sep = ''), col_names = FALSE)
 
-write.xlsx(total_sgRNA_or_gene, file = paste('./output_cleaning/', sgRNA_library_selected, '_cleaned_report.xlsx', sep = ''), row.names = FALSE)
+write.xlsx(df_count, file = paste('./output_cleaning/', sgRNA_library_selected, '_step_by_step_report.xlsx', sep = ''), row.names = FALSE)
+write.xlsx(total_sgRNA_or_gene, file = paste('./output_cleaning/', sgRNA_library_selected, '_genes_report.xlsx', sep = ''), row.names = FALSE)
 
 ```
 
