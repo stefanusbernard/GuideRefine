@@ -881,7 +881,7 @@ total_sgRNA_or_gene <- total_sgRNA_or_gene_lost %>%
 
 ```{r Snippets of exported file, echo = FALSE}
 
-kable(head(total_sgRNA_or_gene, 25))
+kable(head(sgRNA_library_refined, 25))
 kable(head(total_sgRNA_or_gene, 25))
 
 ```
