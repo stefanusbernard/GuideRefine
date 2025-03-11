@@ -168,7 +168,9 @@ if (file_test('-f', paste('./object_intermediate/', aln_2_mismatch_filename, sep
 ```
 
 ```{r import csv file from the alignment, echo = FALSE, include = FALSE}
+
 library_alignment <- read_csv(paste('./object_intermediate/', aln_2_mismatch_filename, sep = ''))
+
 ```
 
 ```{r, echo = FALSE, include = FALSE}
@@ -183,31 +185,15 @@ track_table <- function_df_count(track_table,
                                  notes = 'count beginning')
 ```
 
-```{r Select only valid chromosome, include = FALSE}
-
-list_chromosome <- paste0('chr', c(1:22, 'X', 'Y'))
-
-library_alignment <- library_alignment %>%
-  filter(chr %in% list_chromosome | is.na(chr))
-
-```
-
-
 ```{r Select original gene list, include = FALSE}
 gene_original <- c(unique(library_alignment$gene))
-```
-
-```{r, include = FALSE}
-track_table <- function_df_count(track_table,
-                                 count_sgrna = length(unique(library_alignment$sgRNA)),
-                                 num_genes = length(unique(library_alignment$gene)),
-                                 num_alignments = length(library_alignment$sgRNA),
-                                 notes = 'selecting standard chromosome only')
 ```
 
 ## Report of Multi-target sgRNAs
 
 ```{r Find multi-target sgRNAs, include = FALSE}
+
+list_chromosome <- paste0('chr', c(1:22, 'X', 'Y'))
 
 # multi-target sgRNA: sgRNA aligned to multiple locations with 0 mismatch
 # count the number of sgRNA dropped per gene due to multi-target sgRNA
@@ -226,12 +212,15 @@ track_table <- function_df_count(track_table,
 
 ```
 
-```{r Discard multi-target sgRNAs, include = FALSE}
+```{r Discard multi-target sgRNAs and select only standard chromosome, include = FALSE}
 
 `%notin%` <- Negate(`%in%`)
 
 library_alignment <- library_alignment %>%
-  filter(sgRNA %notin% `[multi-target sgRNA] list guides`)
+  filter(sgRNA %notin% `[multi-target sgRNA] list guides`) %>%
+  filter(chr %in% list_chromosome | is.na(chr))
+
+test <- library_alignment %>% filter(gene == 'GSTT1')
 
 ```
 
@@ -294,7 +283,6 @@ gene_original <- setdiff(gene_original, genes_lost_single_mismatch_sgrna)
 ```{r Genes lost due to single-mismatch sgRNAs, echo = FALSE}
 
 print(paste('Number of genes lost due to single mismatch sgRNAs: ', length(genes_lost_single_mismatch_sgrna), sep = ''))
-# print(genes_lost_single_mismatch_sgrna)
 
 ```
 
@@ -420,6 +408,14 @@ sgRNA_library_control <- library_alignment %>%
   select(sgRNA, spacer, gene) %>%
   distinct()
 
+# separate sgRNA not targeting anywhere
+sgRNA_not_target_anywhere <- library_alignment %>%
+  filter(is.na(protospacer) & !str_detect(gene, terms_for_filtering)) %>%
+  select(sgRNA, gene) %>%
+  distinct() %>%
+  count(gene) %>%
+  dplyr::rename('sgRNA not target anywhere' = 'n')
+
 # filter gene not in control and drop sgRNAs not targeting anywhere
 library_alignment <- library_alignment %>%
   filter(gene %notin% unique(sgRNA_library_control$gene)) %>%
@@ -428,6 +424,14 @@ library_alignment <- library_alignment %>%
 # detected control sgRNA
 detected_control_sgrna <- unique(sgRNA_library_control$gene)
 
+```
+
+```{r Update df_count table, echo = FALSE}
+track_table <- function_df_count(track_table,
+                                 count_sgrna = length(unique(library_alignment$sgRNA)),
+                                 num_genes = length(unique(library_alignment$gene)),
+                                 num_alignments = length(library_alignment$sgRNA),
+                                 notes = paste(length(unique(sgRNA_not_target_anywhere$sgRNA)), ' sgRNAs not target anywhere discarded'))
 ```
 
 ```{r Import CCDS data, include = FALSE}
@@ -500,8 +504,8 @@ gene_df <- hits %>%
             CDS_end = GenomicRanges::end(gene_annot_granges)[subjectHits] %>% as.integer()) %>%
   distinct()
 
-paste('count sgRNAs: ', length(unique(gene_df$sgrna)))
-paste('alignments left after annotation:', length(gene_df$sgrna))
+test_2 <- gene_df %>% filter(gene %in% c('HLA-DRB4', 'GSTT1'))
+
 ```
 
 
@@ -513,8 +517,8 @@ paste('alignments left after annotation:', length(gene_df$sgrna))
 
 gene_df %>%
   filter(mismatches == 0) %>%
-  mutate(notes = case_when(str_extract(sgrna, "(?<=sg)([A-Za-z0-9-]+)") %in% gene ~ 'symbol match',
-                           str_extract(sgrna, "(?<=sg)([A-Za-z0-9-]+)") %notin% gene ~ 'symbol mismatch')) %>%
+  mutate(notes = case_when(str_extract(sgrna, "(?<=sg)([A-Za-z0-9-]+)") == gene ~ 'symbol match',
+                           str_extract(sgrna, "(?<=sg)([A-Za-z0-9-]+)") != gene ~ 'symbol mismatch')) %>%
   select(gene, notes) %>%
   distinct() %>%
   count(notes) %>%
@@ -537,12 +541,11 @@ gene_df %>%
 
 ```{r Correct the sgRNA according to targeted gene symbol, echo = FALSE}
 
-# categorize sgRNA with gene symbol match and sgRNA with gene symbol mismatch (there is a bug here)
+# categorize sgRNA with gene symbol match and sgRNA with gene symbol mismatch
 gene_df_check <- gene_df %>%
   filter(mismatches == 0) %>%
   mutate(notes = case_when(str_extract(sgrna, "(?<=sg)([A-Za-z0-9-]+)") == gene ~ 'symbol match',
                            str_extract(sgrna, "(?<=sg)([A-Za-z0-9-]+)") != gene ~ 'symbol mismatch'))
-
 
 # check for duplicate spacer in gene_df_match and discard it (sgRNA targeting the same gene but different exon location)
 gene_df_match <- gene_df_check %>%
@@ -586,8 +589,8 @@ gene_df_corrected <- gene_df_match %>%
 # Histogram of corrected gene symbol
 gene_df_corrected %>%
   filter(mismatches == 0) %>%
-  mutate(notes = case_when(str_extract(sgrna, "(?<=sg)([A-Za-z0-9-]+)") %in% gene ~ 'symbol match',
-                           str_extract(sgrna, "(?<=sg)([A-Za-z0-9-]+)") %notin% gene ~ 'symbol mismatch')) %>%
+  mutate(notes = case_when(str_extract(sgrna, "(?<=sg)([A-Za-z0-9-]+)") == gene ~ 'symbol match',
+                           str_extract(sgrna, "(?<=sg)([A-Za-z0-9-]+)") != gene ~ 'symbol mismatch')) %>%
   select(gene, notes) %>%
   distinct() %>%
   count(notes) %>%
@@ -663,11 +666,12 @@ track_table <- function_df_count(track_table,
 
 ```{r Find sgRNAs failed to target exon, include = FALSE}
 
-list_sgRNAs_not_target_exon <- setdiff(unique(library_alignment$sgRNA), unique(gene_df_corrected$sgrna))
+list_sgRNA_not_target_exon <- setdiff(unique(library_alignment$sgRNA), unique(gene_df_corrected$sgrna))
 
-sgRNAs_not_target_exon <- sgRNA_library %>%
+sgRNA_not_target_exon <- library_alignment %>%
   select(sgRNA, gene) %>%
-  filter(sgRNA %in% list_sgRNAs_not_target_exon) %>%
+  filter(sgRNA %in% list_sgRNA_not_target_exon) %>%
+  distinct() %>%
   count(gene) %>%
   filter(gene %notin% gene_track_annotation$old_gene) %>%
   dplyr::rename('sgRNA not target exon' = 'n')
@@ -819,10 +823,12 @@ total_sgRNA_or_gene_lost <- data.frame('gene' = sgRNA_library$gene) %>%
   mutate(`single mismatch sgRNA` = replace_na(`single mismatch sgRNA`, 0)) %>%
   left_join(`dropped due to [PAM-distal double mismatch]`, by = 'gene') %>%
   mutate(`PAM distal double mismatch` = replace_na(`PAM distal double mismatch`, 0)) %>%
-  left_join(sgRNAs_not_target_exon, by = 'gene') %>%
+  left_join(sgRNA_not_target_anywhere, by = 'gene') %>%
+  mutate(`sgRNA not target anywhere` = replace_na(`sgRNA not target anywhere`, 0)) %>%
+  left_join(sgRNA_not_target_exon, by = 'gene') %>%
   mutate(`sgRNA not target exon` = replace_na(`sgRNA not target exon`, 0)) %>%
   mutate(
-    `counted total sgRNA` = `sgRNA number` - (`multi-target sgRNA` + `single mismatch sgRNA` + `PAM distal double mismatch` + `sgRNA not target exon`)) %>%
+    `counted total sgRNA` = `sgRNA number` - (`multi-target sgRNA` + `single mismatch sgRNA` + `PAM distal double mismatch` + `sgRNA not target anywhere` + `sgRNA not target exon`)) %>%
   mutate(`symbol change` = case_when(gene %in% gene_track_annotation$old_gene ~
                                        gene_track_annotation$gene[match(gene, gene_track_annotation$old_gene)],
                                         TRUE ~ 'no')) %>%
