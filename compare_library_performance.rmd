@@ -1,0 +1,119 @@
+---
+title: "Compare sgRNA Library performance"
+author: "Author: Stefanus Bernard"
+date: "Date: `r format(Sys.time(), '%d %B %Y')`"
+output: 
+  html_document :
+    theme : cerulean
+    toc : true
+    toc_float : true
+    number_section : true
+---
+
+```{r setup, include=FALSE}
+
+library(tidyverse)
+library(crisprDesign)
+library(crisprBowtie)
+library(crisprBase)
+library(readxl)
+library(BSgenome.Hsapiens.UCSC.hg38)
+bsgenome <- BSgenome.Hsapiens.UCSC.hg38
+
+devtools::install_github("crisprVerse/crisprDesignData")
+
+```
+
+Import sgRNA library data
+
+```{r}
+# import sample sgRNA library
+data <- read_tsv('./public_crispr_library/broadgpp-brunello-library-contents.tsv', col_names = FALSE)
+colnames(data) <- c('sgRNA', 'spacer', 'gene')
+data
+
+```
+
+Building a guideset object
+
+```{r}
+data(SpCas9, package = "crisprBase")
+crisprNuclease <- SpCas9
+crisprNuclease
+```
+
+Alignment to Human Reference Genome
+
+```{r}
+spacers_sequence <- c(unique(data$spacer))
+bowtie_index <- file.path('./bowtie_index', 'hg38')
+aln <- runCrisprBowtie(spacers_sequence,
+                                    mode = 'spacer',
+                                    bsgenome = BSgenome.Hsapiens.UCSC.hg38,
+                                    crisprNuclease = crisprNuclease,
+                                    n_mismatches = 2,
+                                    canonical = TRUE,
+                                    bowtie_index = bowtie_index)
+      
+```
+
+Only keep alignments for standard chromosome
+
+```{r}
+chrs <- paste0("chr",c(1:22, "X", "Y"))
+aln <- aln[aln$chr %in% chrs,,drop=FALSE]
+```
+
+Add genomic coordinates to the dataframe
+
+```{r}
+wh <- match(data$spacer, aln$spacer)
+data$chr <- aln$chr[wh]
+data$pam_site <- aln$pam_site[wh]
+data$pam <- aln$pam[wh]
+data$strand <- aln$strand[wh]
+head(data)
+```
+
+Filter guides that dont have a match to the genome
+
+```{r}
+data <- data[!is.na(data$pam_site),,drop=FALSE]
+```
+
+Create unique ID for each spacer sequence
+
+```{r}
+ids <- paste0("gRNA_", seq_len(nrow(data)))
+head(ids)
+```
+
+Build Guideset object
+
+```{r}
+gs <- GuideSet(ids=ids,
+               protospacers=data$spacer,
+               pams=data$pam,
+               pam_site=data$pam_site,
+               seqnames=data$chr,
+               strand=data$strand,
+               CrisprNuclease=crisprNuclease,
+               bsgenome=bsgenome)
+gs$gene_symbol <- data$gene_symbol
+
+```
+
+Off-target Characterization
+
+```{r}
+
+data(txdb_human, package = 'crisprDesignData')
+txObject <- txdb_human
+gs <- addSpacerAlignments(gs,
+                          txObject=txObject,
+                          aligner="bowtie",
+                          aligner_index=bowtie_index,
+                          bsgenome=bsgenome,
+                          n_mismatches=2)
+
+```

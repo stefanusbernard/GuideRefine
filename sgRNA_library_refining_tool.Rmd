@@ -80,12 +80,23 @@ library(xlsx)
 
 ```
 
+```{r List of functions, include = FALSE}
+
+# function to track the number of sgRNAs, number of genes, number of alignments, and notes
+function_df_count <- function(df_count, count_sgrna, num_genes, num_alignments, notes){
+  df_count <- rbind(df_count, c(count_sgrna, num_genes, num_alignments, notes))
+  kable(df_count)
+  return(df_count)
+}
+
+```
+
 ## Detected file input
 
 ```{r User defined variable (User input), echo = FALSE}
 
-file_dir_location <- './public_crispr_library/'
-sgRNA_library_selected <- 'tkov3_guide_sequence'
+file_dir_location <- './cellecta_library/'
+sgRNA_library_selected <- 'sample_M1_150K'
 
 ccds_filename <- 'CCDS_20250112.txt'
 
@@ -157,34 +168,20 @@ if (file_test('-f', paste('./object_intermediate/', aln_2_mismatch_filename, sep
 ```
 
 ```{r import csv file from the alignment, echo = FALSE, include = FALSE}
-
 library_alignment <- read_csv(paste('./object_intermediate/', aln_2_mismatch_filename, sep = ''))
-sgRNA_beginning <- length(unique(library_alignment$sgRNA))
-
 ```
 
 ```{r, echo = FALSE, include = FALSE}
 
-count_sgrna <- c()
-num_genes <- c()
-num_alignments <- c()
-notes <- c()
+track_table <- data.frame(matrix(ncol = 4, nrow = 0))
+colnames(track_table) <- c('count_sgrna', 'num_genes', 'num_alignments', 'notes')
 
-count_sgrna <- append(count_sgrna, length(unique(library_alignment$sgRNA)))
-num_genes <- append(num_genes, length(unique(library_alignment$gene)))
-num_alignments <- append(num_alignments, length(library_alignment$sgRNA))
-notes <- append(notes, 'beginning')
-
-df_count <- data.frame(count_sgrna, num_genes, num_alignments, notes)
-
+track_table <- function_df_count(track_table,
+                                 count_sgrna = length(unique(library_alignment$sgRNA)),
+                                 num_genes = length(unique(library_alignment$gene)),
+                                 num_alignments = length(library_alignment$sgRNA),
+                                 notes = 'count beginning')
 ```
-
-```{r, include = FALSE}
-
-kable(df_count)
-
-```
-
 
 ```{r Select only valid chromosome, include = FALSE}
 
@@ -197,19 +194,15 @@ library_alignment <- library_alignment %>%
 
 
 ```{r Select original gene list, include = FALSE}
-
 gene_original <- c(unique(library_alignment$gene))
-
 ```
 
 ```{r, include = FALSE}
-df_count <- rbind(df_count, 
-                  c(length(unique(library_alignment$sgRNA)),
-                    length(unique(library_alignment$gene)),
-                    length(library_alignment$sgRNA), 
-                    'selecting_normal_chr'))
-
-kable(df_count)
+track_table <- function_df_count(track_table,
+                                 count_sgrna = length(unique(library_alignment$sgRNA)),
+                                 num_genes = length(unique(library_alignment$gene)),
+                                 num_alignments = length(library_alignment$sgRNA),
+                                 notes = 'selecting standard chromosome only')
 ```
 
 ## Report of Multi-target sgRNAs
@@ -254,19 +247,15 @@ gene_original <- setdiff(gene_original, genes_lost_multi_target_sgrna)
 ```{r Genes lost due to multi-target sgRNAs, echo = FALSE}
 
 print(paste('Number of genes lost due to multi-target sgRNAs: ', length(genes_lost_multi_target_sgrna), sep = ''))
-# print(genes_lost_multi_target_sgrna)
 
 ```
 
 ```{r, include = FALSE}
-df_count <- rbind(df_count,
-                  c((length(unique(library_alignment$sgRNA))), 
-                    length(unique(library_alignment$gene)),
-                    length(library_alignment$sgRNA), 
-                    paste(length(`[multi-target sgRNA] list guides`), ' multi-target guides discarded')))
-
-
-kable(df_count)
+track_table <- function_df_count(track_table,
+                                 count_sgrna = length(unique(library_alignment$sgRNA)),
+                                 num_genes = length(unique(library_alignment$gene)),
+                                 num_alignments = length(library_alignment$sgRNA),
+                                 notes = paste(length(`[multi-target sgRNA] list guides`), ' multi-target guides discarded'))
 ```
 
 ## Report of sgRNA aligned with single mismatch
@@ -310,14 +299,11 @@ print(paste('Number of genes lost due to single mismatch sgRNAs: ', length(genes
 ```
 
 ```{r, include = FALSE}
-df_count <- rbind(df_count,
-                  c((length(unique(library_alignment$sgRNA))), 
-                    length(unique(library_alignment$gene)),
-                    length(library_alignment$sgRNA), 
-                    paste(length(`[single mismatch sgRNA] list guides`), ' single mismatch sgRNA discarded')))
-
-
-kable(df_count)
+track_table <- function_df_count(track_table,
+                                 count_sgrna = length(unique(library_alignment$sgRNA)),
+                                 num_genes = length(unique(library_alignment$gene)),
+                                 num_alignments = length(library_alignment$sgRNA),
+                                 notes = paste(length(`[single mismatch sgRNA] list guides`), ' single mismatch sgRNA discarded'))
 ```
 
 ## Report of sgRNA aligned with double mismatches at the PAM distal
@@ -377,7 +363,6 @@ pam_distal_double_mismatch
   count(sgRNA, gene) %>%
   dplyr::rename('Frequency' = 'n')
   
-
 `dropped due to [PAM-distal double mismatch]` <- `[PAM-distal double mismatch] count dropped guides per gene` %>%
   count(gene) %>%
   dplyr::rename('PAM distal double mismatch' = 'n')
@@ -410,21 +395,17 @@ gene_original <- setdiff(gene_original, genes_lost_pam_mismatch_sgrna)
 ```{r Genes lost due to PAM distal double mismatch sgRNAs, echo = FALSE}
 
 print(paste('Number of genes lost due to PAM distal double mismatch sgRNAs: ', length(genes_lost_pam_mismatch_sgrna), sep = ''))
-# print(genes_lost_pam_mismatch_sgrna)
 
 ```
 
 ## Compiled report of multi-target, single mismatch, and PAM distal double mismatch sgRNAs
 
 ```{r Update df_count table, echo = FALSE}
-df_count <- rbind(df_count,
-                  c((length(unique(library_alignment$sgRNA))), 
-                    length(unique(library_alignment$gene)),
-                    length(library_alignment$sgRNA), 
-                    paste(length(`[PAM-distal double mismatch] list guides`), ' PAM-distal double mismatch sgRNA discarded')))
-
-
-kable(df_count)
+track_table <- function_df_count(track_table,
+                                 count_sgrna = length(unique(library_alignment$sgRNA)),
+                                 num_genes = length(unique(library_alignment$gene)),
+                                 num_alignments = length(library_alignment$sgRNA),
+                                 notes = paste(length(`[PAM-distal double mismatch] list guides`), ' PAM-distal double mismatch sgRNA discarded'))
 ```
 
 ```{r Separate control or intron control sgRNA with the rest of sgRNA, include = FALSE}
@@ -556,11 +537,11 @@ gene_df %>%
 
 ```{r Correct the sgRNA according to targeted gene symbol, echo = FALSE}
 
-# categorize sgRNA with gene symbol match and sgRNA with gene symbol mismatch
+# categorize sgRNA with gene symbol match and sgRNA with gene symbol mismatch (there is a bug here)
 gene_df_check <- gene_df %>%
   filter(mismatches == 0) %>%
-  mutate(notes = case_when(str_extract(sgrna, "(?<=sg)([A-Za-z0-9-]+)") %in% gene ~ 'symbol match',
-                           str_extract(sgrna, "(?<=sg)([A-Za-z0-9-]+)") %notin% gene ~ 'symbol mismatch'))
+  mutate(notes = case_when(str_extract(sgrna, "(?<=sg)([A-Za-z0-9-]+)") == gene ~ 'symbol match',
+                           str_extract(sgrna, "(?<=sg)([A-Za-z0-9-]+)") != gene ~ 'symbol mismatch'))
 
 
 # check for duplicate spacer in gene_df_match and discard it (sgRNA targeting the same gene but different exon location)
@@ -667,20 +648,15 @@ gene_original_corrected <- setdiff(gene_original_corrected, genes_lost_after_ann
 ```{r Genes lost after gene annotation, echo = FALSE}
 
 print(paste('number of genes lost following the annotation: ', length(genes_lost_after_annotation), sep = ''))
-# print(genes_lost_after_annotation)
 
 ```
 
 ```{r, include = FALSE}
-df_count <- rbind(df_count,
-                  c((length(unique(gene_df_corrected$sgrna))), 
-                    length(unique(gene_df_corrected$gene)),
-                    length(gene_df_corrected$sgrna), 
-                    paste(length(unique(gene_df_corrected$sgrna)), ' sgRNA targeting exon only')))
-
-
-kable(df_count)
-
+track_table <- function_df_count(track_table,
+                                 count_sgrna = length(unique(gene_df_corrected$sgrna)),
+                                 num_genes = length(unique(gene_df_corrected$gene)),
+                                 num_alignments = length(gene_df_corrected$sgrna),
+                                 notes = paste(length(unique(gene_df_corrected$sgrna)), ' sgRNA targeting exon only'))
 ```
 
 ## Filter only sgRNAs targeting exons of protein-coding genes
@@ -753,14 +729,11 @@ print(paste('number of non protein-coding genes: ', length(genes_not_pcg), sep =
 ```
 
 ```{r, include = FALSE}
-df_count <- rbind(df_count,
-                  c((length(unique(sgRNA_library_gene_df_annot$sgrna))), 
-                    length(unique(sgRNA_library_gene_df_annot$gene)),
-                    length(sgRNA_library_gene_df_annot$sgrna), 
-                    paste(length(unique(sgRNA_library_gene_df_annot$sgrna)), ' sgRNA successfully annotated')))
-
-
-kable(df_count)
+track_table <- function_df_count(track_table,
+                                 count_sgrna = length(unique(sgRNA_library_gene_df_annot$sgrna)),
+                                 num_genes = length(unique(sgRNA_library_gene_df_annot$gene)),
+                                 num_alignments = length(sgRNA_library_gene_df_annot$sgrna),
+                                 notes = paste(length(unique(sgRNA_library_gene_df_annot$sgrna)), ' sgRNA successfully annotated'))
 
 ```
 
@@ -818,15 +791,14 @@ paste('number of genes lost: ', num_original_genes-num_genes_after_cleaning_3_gu
 ## Final report of refined sgRNA library
 
 ```{r, echo = FALSE}
-df_count <- rbind(df_count,
-                  c((length(unique(sgRNA_library_cleaned$sgRNA))), 
-                    length(unique(sgRNA_library_cleaned$gene)),
-                    '-', 
-                    paste(length(unique(guides_below_3$gene)), ' genes discarded (< 3 sgRNAs)')))
 
+track_table <- function_df_count(track_table,
+                                 count_sgrna = length(unique(sgRNA_library_cleaned$sgRNA)),
+                                 num_genes = length(unique(sgRNA_library_cleaned$gene)),
+                                 num_alignments = '-',
+                                 notes = paste(length(unique(guides_below_3$gene)), ' genes discarded (< 3 sgRNAs)'))
 
-kable(df_count)
-
+kable(track_table)
 ```
 
 ```{r Combine the control sgRNA back with the original dataframe, include = FALSE}	
