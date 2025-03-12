@@ -176,8 +176,6 @@ library_alignment <- read_csv(paste('./object_intermediate/', aln_2_mismatch_fil
 ```{r, echo = FALSE, include = FALSE}
 
 track_table <- data.frame(matrix(ncol = 4, nrow = 0))
-colnames(track_table) <- c('count_sgrna', 'num_genes', 'num_alignments', 'notes')
-
 track_table <- function_df_count(track_table,
                                  count_sgrna = length(unique(library_alignment$sgRNA)),
                                  num_genes = length(unique(library_alignment$gene)),
@@ -557,7 +555,7 @@ gene_df_match <- gene_df_check %>%
 gene_df_mismatch <- gene_df_check %>%
   filter(notes == 'symbol mismatch') %>%
   mutate(duplicate_spacer_gene = duplicated(spacer, gene)) %>%
-  arrange(sgrna) %>%
+  arrange(gene) %>%
   filter(!duplicate_spacer_gene == TRUE)
 
 # arrange sequential numbers here
@@ -807,6 +805,7 @@ track_table <- function_df_count(track_table,
                                  num_alignments = '-',
                                  notes = paste(length(unique(guides_below_3$gene)), ' genes discarded (< 3 sgRNAs)'))
 
+colnames(track_table) <- c('count_sgrna', 'num_genes', 'num_alignments', 'notes')
 kable(track_table)
 ```
 
