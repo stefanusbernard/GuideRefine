@@ -96,7 +96,7 @@ function_df_count <- function(df_count, count_sgrna, num_genes, num_alignments, 
 ```{r User defined variable (User input), echo = FALSE}
 
 file_dir_location <- './cellecta_library/'
-sgRNA_library_selected <- 'sample_M1_150K'
+sgRNA_library_selected <- 'sample_M3_150K'
 
 ccds_filename <- 'CCDS_20250112.txt'
 
@@ -185,16 +185,19 @@ track_table <- function_df_count(track_table,
                                  notes = 'count beginning')
 ```
 
-```{r Select original gene list, include = FALSE}
+```{r Select original gene list and remove any alignment to non standard chromosome, include = FALSE}
 gene_original <- c(unique(library_alignment$gene))
+
+
+list_chromosome <- paste0('chr', c(1:22, 'X', 'Y'))
+library_alignment <- library_alignment %>%
+  filter(chr %in% list_chromosome | is.na(chr))
+
 ```
 
 ## Report of Multi-target sgRNAs
 
 ```{r Find multi-target sgRNAs, include = FALSE}
-
-list_chromosome <- paste0('chr', c(1:22, 'X', 'Y'))
-
 # multi-target sgRNA: sgRNA aligned to multiple locations with 0 mismatch
 # count the number of sgRNA dropped per gene due to multi-target sgRNA
 `[multi-target sgRNA] count dropped guides per gene` <- library_alignment %>%
@@ -220,8 +223,6 @@ library_alignment <- library_alignment %>%
   filter(sgRNA %notin% `[multi-target sgRNA] list guides`) %>%
   filter(chr %in% list_chromosome | is.na(chr))
 
-test <- library_alignment %>% filter(gene == 'GSTT1')
-
 ```
 
 ```{r Find genes lost due to multi-target sgRNAs, include = FALSE}
@@ -234,9 +235,7 @@ gene_original <- setdiff(gene_original, genes_lost_multi_target_sgrna)
 [**Genes lost due to multi-target sgRNAs**]{style="color:red"}
 
 ```{r Genes lost due to multi-target sgRNAs, echo = FALSE}
-
 print(paste('Number of genes lost due to multi-target sgRNAs: ', length(genes_lost_multi_target_sgrna), sep = ''))
-
 ```
 
 ```{r, include = FALSE}
@@ -388,7 +387,7 @@ print(paste('Number of genes lost due to PAM distal double mismatch sgRNAs: ', l
 
 ## Compiled report of multi-target, single mismatch, and PAM distal double mismatch sgRNAs
 
-```{r Update df_count table, echo = FALSE}
+```{r, echo = FALSE}
 track_table <- function_df_count(track_table,
                                  count_sgrna = length(unique(library_alignment$sgRNA)),
                                  num_genes = length(unique(library_alignment$gene)),
@@ -426,7 +425,7 @@ detected_control_sgrna <- unique(sgRNA_library_control$gene)
 
 ```
 
-```{r Update df_count table, echo = FALSE}
+```{r, echo = FALSE}
 track_table <- function_df_count(track_table,
                                  count_sgrna = length(unique(library_alignment$sgRNA)),
                                  num_genes = length(unique(library_alignment$gene)),
@@ -554,15 +553,21 @@ gene_df_match <- gene_df_check %>%
   arrange(sgrna) %>%
   filter(!duplicate_spacer_gene == TRUE)
 
-# separate sgRNA with gene symbol mismatch dataframe, discard duplicated spacer, and correct sgRNA - gene name according to the alignment exon location and add _SC to tag the sgRNA with corrected gene symbol
+# separate sgRNA with gene symbol mismatch dataframe, discard duplicated spacer
 gene_df_mismatch <- gene_df_check %>%
   filter(notes == 'symbol mismatch') %>%
   mutate(duplicate_spacer_gene = duplicated(spacer, gene)) %>%
   arrange(sgrna) %>%
-  filter(!duplicate_spacer_gene == TRUE) %>%
-  mutate(sgrna_num = str_extract(sgrna, '.$'),
-         new_sgrna_id = paste('sg', gene, '_', sgrna_num, '_SC' , sep ='')) %>%
-  select(-c(sgrna, sgrna_num)) %>%
+  filter(!duplicate_spacer_gene == TRUE)
+
+# arrange sequential numbers here
+run_length <- rle(gene_df_mismatch$gene)$lengths
+sequential_numbers <- sequence(run_length)
+
+# correct sgRNA - gene name according to the alignment exon location and add new sgRNA number id alongside _SC (corrected gene symbol)
+gene_df_mismatch <- gene_df_mismatch %>%
+  mutate(new_sgrna_id = paste('sg', gene, '_', sequential_numbers, '_SC' , sep ='')) %>%
+  select(-sgrna) %>%
   dplyr::rename('sgrna' = 'new_sgrna_id') %>%
   relocate(sgrna, .before = spacer) %>%
   mutate(notes = 'symbol corrected')
@@ -874,8 +879,9 @@ value <- paste0(round(length(sgRNA_library_refined$sgRNA) / 1000, digits = 0), '
 write_tsv(sgRNA_library_refined, 
           file = paste('./output_cleaning/', sgRNA_library_selected, '_', value, '_refined.tsv', sep = ''), col_names = FALSE)
 
-write.xlsx(df_count, file = paste('./output_cleaning/', sgRNA_library_selected, '_step_by_step_report.xlsx', sep = ''), row.names = FALSE)
-write.xlsx(total_sgRNA_or_gene, file = paste('./output_cleaning/', sgRNA_library_selected, '_genes_report.xlsx', sep = ''), row.names = FALSE)
+write.xlsx(total_sgRNA_or_gene, file = paste('./output_cleaning/', sgRNA_library_selected, '_full_report.xlsx', sep = ''), row.names = FALSE, sheetName = 'Genes Report', append = TRUE)
+write.xlsx(track_table, file = paste('./output_cleaning/', sgRNA_library_selected, '_full_report.xlsx', sep = ''), row.names = FALSE, sheetName = 'Refining Process Tracker', append = TRUE)
+
 
 ```
 
