@@ -501,8 +501,6 @@ gene_df <- hits %>%
             CDS_end = GenomicRanges::end(gene_annot_granges)[subjectHits] %>% as.integer()) %>%
   distinct()
 
-test_2 <- gene_df %>% filter(gene %in% c('HLA-DRB4', 'GSTT1'))
-
 ```
 
 
