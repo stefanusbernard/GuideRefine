@@ -95,8 +95,8 @@ function_df_count <- function(df_count, count_sgrna, num_genes, num_alignments, 
 
 ```{r User defined variable (User input), echo = FALSE}
 
-file_dir_location <- './cellecta_library/'
-sgRNA_library_selected <- 'sample_M3_150K'
+file_dir_location <- './public_crispr_library/'
+sgRNA_library_selected <- 'tkov3_guide_sequence'
 
 ccds_filename <- 'CCDS_20250112.txt'
 
