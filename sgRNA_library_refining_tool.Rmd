@@ -253,7 +253,7 @@ track_table <- function_df_count(track_table,
 result_pam_distal_double_mismatch <- pam_distal_double_mismatch(library_alignment)
 
 # remove pam-distal double mismatch sgRNA
-library_alignment <- library_alignment %>%
+library_alignment <- result_pam_distal_double_mismatch$pam_distal_df %>%
   filter(sgRNA %notin% result_pam_distal_double_mismatch$list_guides)
 
 # genes lost due to pam-distal double mismatch sgRNA
@@ -703,11 +703,11 @@ sgRNA_library_refined <- rbind(sgRNA_library_control, sgRNA_library_cleaned)
 total_sgRNA_or_gene_lost <- data.frame('gene' = sgRNA_library$gene) %>%
   count(gene) %>%
   dplyr::rename('sgRNA number' = 'n') %>%
-  left_join(dropped_due_to_multi_target, by = 'gene') %>%
+  left_join(result_multi_target_sgrna$dropped_genes_num, by = 'gene') %>%
   mutate(`multi-target sgRNA` = replace_na(`multi-target sgRNA`, 0)) %>%
-  left_join(dropped_due_to_single_mismatch, by = 'gene') %>%
+  left_join(result_single_mismatch_sgrna$dropped_genes_num, by = 'gene') %>%
   mutate(`single mismatch sgRNA` = replace_na(`single mismatch sgRNA`, 0)) %>%
-  left_join(dropped_due_to_pam_distal_double_mismatch, by = 'gene') %>%
+  left_join(result_pam_distal_double_mismatch$dropped_genes_num, by = 'gene') %>%
   mutate(`PAM distal double mismatch` = replace_na(`PAM distal double mismatch`, 0)) %>%
   left_join(sgRNA_not_target_anywhere, by = 'gene') %>%
   mutate(`sgRNA not target anywhere` = replace_na(`sgRNA not target anywhere`, 0)) %>%

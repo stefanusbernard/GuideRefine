@@ -80,7 +80,7 @@ pam_distal_double_mismatch <- function(alignment_data){
         )
 
     pam_distal_double_mismatch <- detect_pam_distal_double_mismatch %>%
-    filter(type == 'pam-distal double mismatch')
+        filter(type == 'pam-distal double mismatch')
 
     pam_distal_count_dropped_guides_per_gene <- pam_distal_double_mismatch %>%
         select(sgRNA, gene) %>%
@@ -94,6 +94,7 @@ pam_distal_double_mismatch <- function(alignment_data){
     pam_distal_double_mismatch_list_guides <- c(unique(pam_distal_count_dropped_guides_per_gene$sgRNA))
 
     return(list(
+        pam_distal_df = detect_pam_distal_double_mismatch,
         dropped_guides_num = pam_distal_count_dropped_guides_per_gene,
         dropped_genes_num = dropped_due_to_pam_distal_double_mismatch,
         list_guides = pam_distal_double_mismatch_list_guides
