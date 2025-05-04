@@ -1,0 +1,421 @@
+---
+title: "Figure for Institut Curie"
+author: "Author: Stefanus Bernard"
+date: "Date: `r format(Sys.time(), '%d %B %Y')`"
+output: 
+    html_document:
+      theme: cerulean
+      toc: true
+      toc_float: true
+      number_sections: true
+      self_contained: true
+---
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(VennDiagram)
+library(grid)
+```
+
+```{r}
+brunello <- 'broadgpp-brunello-library-contents_full_report.xlsx'
+toronto <- 'tkov3_guide_sequence_full_report.xlsx'
+cellecta_M1 <- 'sample_M1_150K_full_report.xlsx'
+cellecta_M2 <- 'sample_M2_150K_full_report.xlsx'
+cellecta_M3 <- 'sample_M3_150K_full_report.xlsx'
+
+brunello_report <- read_excel(paste('./output_cleaning/', brunello, sep = ''))
+toronto_report <- read_excel(paste('./output_cleaning/', toronto, sep = ''))
+cellecta_report_M1 <- read_excel(paste('./output_cleaning/', cellecta_M1, sep = ''))
+cellecta_report_M2 <- read_excel(paste('./output_cleaning/', cellecta_M2, sep = ''))
+cellecta_report_M3 <- read_excel(paste('./output_cleaning/', cellecta_M3, sep = ''))
+
+cellecta_report <- rbind(cellecta_report_M1, cellecta_report_M2, cellecta_report_M3)
+cellecta_report <- cellecta_report %>%
+    arrange() %>%
+    distinct()
+
+```
+
+```{r}
+
+calculate_percentage <- function(library_report, discarded_sgrna, original_sgrna) {
+    percentage_discarded <- (sum(library_report[[discarded_sgrna]])/sum(library_report[[original_sgrna]])) * 100
+    return(percentage_discarded)
+}
+
+cellecta_multi_target <- round(calculate_percentage(cellecta_report, "multi-target sgRNA", "sgRNA number"), 2)
+brunello_multi_target <- round(calculate_percentage(brunello_report, "multi-target sgRNA", "sgRNA number"), 2)
+toronto_multi_target <- round(calculate_percentage(toronto_report, "multi-target sgRNA", "sgRNA number"), 2)
+
+cellecta_single_mismatch <- round(calculate_percentage(cellecta_report, "single mismatch sgRNA", "sgRNA number"), 2)
+brunello_single_mismatch <- round(calculate_percentage(brunello_report, "single mismatch sgRNA", "sgRNA number"), 2)
+toronto_single_mismatch <- round(calculate_percentage(toronto_report, "single mismatch sgRNA", "sgRNA number"), 2)
+
+cellecta_pam_distal <- round(calculate_percentage(cellecta_report, "PAM distal double mismatch", "sgRNA number"), 2)
+brunello_pam_distal <- round(calculate_percentage(brunello_report, "PAM distal double mismatch", "sgRNA number"), 2)
+toronto_pam_distal <- round(calculate_percentage(toronto_report, "PAM distal double mismatch", "sgRNA number"), 2)
+
+```
+
+# create dataframe for multi-target, single-mismatch, and pam-distal from all library
+
+```{r}
+multi_target <- c(brunello_multi_target, toronto_multi_target, cellecta_multi_target)
+single_mismatch <- c(brunello_single_mismatch, toronto_single_mismatch, cellecta_single_mismatch)
+pam_distal <- c(brunello_pam_distal, toronto_pam_distal, cellecta_pam_distal)
+
+
+library <- c("brunello", "toronto v3", "cellecta")
+factor <- c(2, 3, 1)
+
+sum_dataframe <- data.frame(library, multi_target, single_mismatch, pam_distal, factor)
+
+```
+
+# Histogram of multi-target/off-target sgRNAs in Cellecta, Brunello, and Toronto
+
+```{r}
+
+barplot <- ggplot(sum_dataframe, aes(x = reorder(library, factor), y = pam_distal)) +
+    geom_histogram(stat = "identity", fill = c("powderblue", "mistyrose", "lightgreen")) +
+    theme_minimal() +
+    labs(title = "", x = "", y = "") +
+    scale_x_discrete(labels=c('brunello' = 'Brunello \n 77K sgRNAs',
+                              'cellecta' = 'Cellecta \n 150K sgRNAs',
+                              'toronto v3' = 'Toronto \nKnockout V3 \n 71K sgRNAs')) +
+    geom_text(aes(label = pam_distal), vjust=-0.5, size = 10) +
+    theme(axis.text.x = element_text(size = 30),
+        axis.text.y = element_text(size = 30),
+        axis.title.y = element_text(size = 30, vjust=0.5, margin = margin(r = 20))) +
+    ylim(0, 10)
+barplot
+
+```
+
+# Number of genes completely eliminated due to the multi-target sgRNAs
+
+```{r}
+hgnc <- read_tsv(url('https://storage.googleapis.com/public-download-files/hgnc/tsv/tsv/hgnc_complete_set.txt'))
+
+hgnc_selected <- hgnc %>%
+  select(symbol, name, locus_group, locus_type) %>%
+  dplyr::rename('gene' = 'symbol')
+
+genes_completely_lost <- function(library_report, sgrna_discarded, original_sgrna) {
+    data <- library_report %>%
+        select(gene, original_sgrna, sgrna_discarded) %>%
+        filter(.data[[original_sgrna]] == .data[[sgrna_discarded]]) %>%
+        inner_join(hgnc_selected, join_by(gene))
+    
+    return(data)
+}
+
+genes_lost_multi_target_cellecta <- genes_completely_lost(cellecta_report, 'multi-target sgRNA', 'sgRNA number')
+genes_lost_multi_target_brunello <- genes_completely_lost(brunello_report, 'multi-target sgRNA', 'sgRNA number')
+genes_lost_multi_target_toronto <- genes_completely_lost(toronto_report, 'multi-target sgRNA', 'sgRNA number')
+
+## ---------------------------------------------------------------
+
+genes_lost_single_mismatch_cellecta <- genes_completely_lost(cellecta_report, 'single mismatch sgRNA', 'sgRNA number')
+genes_lost_single_mismatch_brunello <- genes_completely_lost(brunello_report, 'single mismatch sgRNA', 'sgRNA number')
+genes_lost_single_mismatch_toronto <- genes_completely_lost(toronto_report, 'single mismatch sgRNA', 'sgRNA number')
+
+## ---------------------------------------------------------------
+
+genes_lost_pam_distal_cellecta <- genes_completely_lost(cellecta_report, 'PAM distal double mismatch', 'sgRNA number')
+genes_lost_pam_distal_brunello <- genes_completely_lost(brunello_report, 'PAM distal double mismatch', 'sgRNA number')
+genes_lost_pam_distal_toronto <- genes_completely_lost(toronto_report, 'PAM distal double mismatch', 'sgRNA number')
+
+# ---------------------------------------------------------------------
+
+genes_lost_multi_target <- c(length(genes_lost_multi_target_brunello$gene), length(genes_lost_multi_target_toronto$gene), length(genes_lost_multi_target_cellecta$gene))
+genes_lost_single_mismatch <- c(length(genes_lost_single_mismatch_brunello$gene), length(genes_lost_single_mismatch_toronto$gene), length(genes_lost_single_mismatch_cellecta$gene))
+
+sum_dataframe_genes <- data.frame(library, genes_lost_multi_target, genes_lost_single_mismatch, factor)
+
+```
+
+# barplot for genes lost
+
+```{r}
+barplot <- ggplot(sum_dataframe_genes, aes(x = reorder(library, factor), y = genes_lost_multi_target)) +
+    geom_histogram(stat = "identity", fill = c("powderblue", "mistyrose", "lightgreen")) +
+    theme_minimal() +
+    labs(title = "", x = "", y = "Number of genes") +
+    scale_x_discrete(labels=c('brunello' = 'Brunello \n 77K sgRNAs',
+                              'cellecta' = 'Cellecta \n 150K sgRNAs',
+                              'toronto v3' = 'Toronto \nKnockout V3 \n 71K sgRNAs')) +
+    geom_text(aes(label = genes_lost_multi_target), vjust=-0.5, size = 10) +
+    theme(axis.text.x = element_text(size = 30),
+        axis.text.y = element_text(size = 30),
+        axis.title.y = element_text(size = 30, vjust=0.5, margin = margin(r = 20)))
+barplot
+
+```
+
+# venn diagram for genes lost
+
+```{r}
+single_mismatch_venn <- venn.diagram(
+    x = list(
+        genes_lost_single_mismatch_brunello$gene,
+        genes_lost_single_mismatch_toronto$gene,
+        genes_lost_single_mismatch_cellecta$gene
+    ),
+    category.names = c("Brunello \n 77K sgRNAs", "Toronto Knockout V3 \n 71K sgRNAs", "Cellecta \n 150K sgRNAs"),
+    filename = NULL,
+    output = TRUE,
+    fill = c("powderblue", "mistyrose", "lightgreen"),
+    alpha = 0.5,
+    cex = 2,
+    cat.cex = 2,
+    cat.pos = c(-20, 20, 180),
+    cat.dist = c(0.1, 0.1, 0.1)
+)
+
+ggsave(
+    path = './',
+    width = 12,
+    height = 10,
+    dpi = 300,
+    plot = single_mismatch_venn,
+    filename = paste('VennDiagram_single_mismatch.png', sep = ''))
+
+```
+
+# looking at the alignment data
+
+```{r}
+
+multi_target_commonality <- intersect(intersect(genes_lost_multi_target_brunello$gene, genes_lost_multi_target_toronto$gene), genes_lost_multi_target_cellecta$gene)
+
+brunello_alignment <- read_csv('./object_intermediate/broadgpp-brunello-library-contents_aln.csv')
+toronto_alignment <- read_csv('./object_intermediate/tkov3_guide_sequence_aln.csv')
+cellecta_M1_alignment <- read_csv('./object_intermediate/sample_M1_150K_aln.csv')
+cellecta_M2_alignment <- read_csv('./object_intermediate/sample_M2_150K_aln.csv')
+cellecta_M3_alignment <- read_csv('./object_intermediate/sample_M3_150K_aln.csv')
+
+brunello_multi_target_commonality <- brunello_alignment %>%
+    filter(gene %in% multi_target_commonality)
+
+toronto_multi_target_commonality <- toronto_alignment %>%
+    filter(gene %in% multi_target_commonality)
+
+```
+
+# Number of genes eliminated after refining
+
+```{r}
+
+calculate_percentage_genes_lost <- function(library_report) {
+    original_gene <- length(unique(library_report$gene))
+    
+    genes_lost <- library_report %>%
+        select(gene, `quality check`) %>%
+        filter(`quality check` == 'fail')
+    
+    discarded_gene <- length(unique(genes_lost$gene))
+
+    percentage_discarded <- (discarded_gene/original_gene) * 100
+    return(list(percentage_discarded, genes_lost))
+}
+
+unlist(calculate_percentage_genes_lost(cellecta_report)[1])
+
+genes_lost_cellecta <- round(unlist(calculate_percentage_genes_lost(cellecta_report)[1]), 2)
+genes_lost_brunello <- round(unlist(calculate_percentage_genes_lost(brunello_report)[1]), 2)
+genes_lost_toronto <- round(unlist(calculate_percentage_genes_lost(toronto_report)[1]), 2)
+
+genes_lost <- c(genes_lost_brunello, genes_lost_toronto, genes_lost_cellecta)
+
+sum_dataframe_genes_lost <- data.frame(library, genes_lost)
+
+```
+
+```{r}
+barplot <- ggplot(sum_dataframe_genes_lost, aes(x = reorder(library, factor), y = genes_lost)) +
+    geom_histogram(stat = "identity", fill = c("powderblue", "mistyrose", "lightgreen")) +
+    theme_minimal() +
+    labs(title = "", x = "", y = "Percentage of genes") +
+    scale_x_discrete(labels=c('brunello' = 'Brunello \n 77K sgRNAs',
+                              'cellecta' = 'Cellecta \n 150K sgRNAs',
+                              'toronto v3' = 'Toronto \nKnockout V3 \n 71K sgRNAs')) +
+    geom_text(aes(label = genes_lost), vjust=-0.5, size = 10) +
+    theme(axis.text.x = element_text(size = 30),
+        axis.text.y = element_text(size = 30),
+        axis.title.y = element_text(size = 30, vjust=0.5, margin = margin(r = 20)))
+barplot
+```
+
+```{r}
+
+unlist_genes_lost_brunello <- as.data.frame(calculate_percentage_genes_lost(brunello_report)[2])
+unlist_genes_lost_toronto <- as.data.frame(calculate_percentage_genes_lost(toronto_report)[2])
+unlist_genes_lost_cellecta <- as.data.frame(calculate_percentage_genes_lost(cellecta_report)[2])
+
+genes_lost_venn <- venn.diagram(
+    x = list(
+        unlist_genes_lost_brunello$gene,
+        unlist_genes_lost_toronto$gene,
+        unlist_genes_lost_cellecta$gene
+    ),
+    category.names = c("Brunello \n 77K sgRNAs", "Toronto Knockout V3 \n 71K sgRNAs", "Cellecta \n 150K sgRNAs"),
+    filename = NULL,
+    output = TRUE,
+    alpha = 0.5,
+    print.mode = c('raw'),
+    cex = 2,
+    cat.cex = 2,
+    cat.pos = c(-20, 20, 180),
+    cat.dist = c(0.1, 0.1, 0.1)
+)
+
+grid.newpage()
+grid.draw(genes_lost_venn)
+grid.polygon(
+  x = unit(c(0.5, 0.6, 0.5, 0.4), "npc"),  # Adjust coordinates for the intersection
+  y = unit(c(0.5, 0.6, 0.7, 0.6), "npc"),
+  gp = gpar(fill = "gold", alpha = 0.7)  # Custom color for the triple intersection
+)
+
+genes_lost_venn
+
+
+ggsave(
+    path = './',
+    width = 12,
+    height = 10,
+    dpi = 300,
+    plot = genes_lost_venn,
+    filename = paste('test.png', sep = ''))
+
+
+```
+
+# What are the genes that completely eliminated in all library
+
+```{r}
+intersection_genes_lost <- intersect(unlist_genes_lost_brunello$gene, intersect(unlist_genes_lost_toronto$gene, unlist_genes_lost_cellecta$gene))
+
+genes_lost_hgnc <- hgnc_selected %>%
+    filter(gene %in% intersection_genes_lost) %>%
+    count(locus_type) %>%
+    dplyr::rename('count' = 'n') %>%
+    ggplot(aes(x = locus_type, y = count)) +
+        geom_histogram(stat = "identity", fill = "#bbc5c1") +
+        theme_minimal() +
+        labs(title = "", x = "", y = "Number of genes") +
+        scale_x_discrete(labels=c('RNA, long non-coding' = 'lncRNA',
+                                'complex locus constituent' = 'Complex \nconstituent loci',
+                                'gene with protein product' = 'Protein-coding \ngenes',
+                                'pseudogene' = 'Pseudogene',
+                                'unknown' = 'Unknown')) +
+        geom_text(aes(label = count), vjust=-0.5, size = 10) +
+        theme(axis.text.x = element_text(size = 20),
+            axis.text.y = element_text(size = 30),
+            axis.title.y = element_text(size = 30, vjust=0.5, margin = margin(r = 20)))
+
+
+genes_lost_hgnc
+
+ggsave(
+    path = './',
+    width = 17,
+    height = 15,
+    dpi = 300,
+    plot = genes_lost_hgnc,
+    filename = paste('genes_lost_hgnc.png', sep = ''))
+
+
+```
+
+# example of gene symbol correction
+
+```{r}
+
+library <- c('brunello', 'brunello', 'toronto', 'toronto', 'cellecta', 'cellecta')
+number_of_genes <- c(16967, 1056, 16313, 1125, 17042, 1376)
+annotation <- c('match', 'mismatch', 'match', 'mismatch', 'match', 'mismatch')
+
+library_correction_report <- data.frame(library, annotation, number_of_genes)
+
+custom_colors <- c('match' = 'lightgreen', 'mismatch' = "mistyrose")
+
+barplot <- ggplot(library_correction_report, aes(x = reorder(library, -number_of_genes), y = number_of_genes, fill = annotation)) +
+    geom_bar(stat = "identity", width = 0.7) +
+    theme_minimal() +
+    labs(title = "", x = "", y = "number of genes") +
+    scale_x_discrete(labels=c('brunello' = 'Brunello \n 77K sgRNAs',
+                              'cellecta' = 'Cellecta \n 150K sgRNAs',
+                              'toronto' = 'Toronto \nKnockout V3 \n 71K sgRNAs')) +
+    geom_text(aes(label = number_of_genes, y = number_of_genes / 2), size = 10) +
+    theme(axis.text.x = element_text(size = 23),
+        axis.text.y = element_text(size = 30),
+        axis.title.y = element_text(size = 30, vjust=0.5, margin = margin(r = 20)),
+        legend.title = element_text(size = 25),
+        legend.text = element_text(size = 25),
+        plot.margin = margin(1, 1, 1, 1)) +
+    scale_fill_manual(values = custom_colors,
+                      name = 'Gene symbol in sgRNA ID',
+                      labels = c('match' = 'match with exon annotation', 
+                                 'mismatch' = 'not match with exon annotation')) +
+    theme(legend.key.size = unit(1.5, "cm"))
+
+barplot
+
+ggsave(
+    path = './',
+    width = 17,
+    height = 10,
+    dpi = 300,
+    plot = barplot,
+    filename = paste('histogram_exon_annotation.png', sep = ''))
+
+
+```
+
+# final result of gene symbol correction
+
+```{r}
+library <- c('brunello', 'toronto', 'cellecta')
+number_of_genes <- c(17927, 17419, 17959)
+annotation <- c('match', 'match', 'match')
+
+library_correction_report <- data.frame(library, annotation, number_of_genes)
+
+custom_colors <- c('match' = 'lightgreen', 'mismatch' = "mistyrose")
+
+barplot <- ggplot(library_correction_report, aes(x = reorder(library, -number_of_genes), y = number_of_genes, fill = annotation)) +
+    geom_bar(stat = "identity", width = 0.7) +
+    theme_minimal() +
+    labs(title = "", x = "", y = "number of genes") +
+    scale_x_discrete(labels=c('brunello' = 'Brunello \n 77K sgRNAs',
+                              'cellecta' = 'Cellecta \n 150K sgRNAs',
+                              'toronto' = 'Toronto \nKnockout V3 \n 71K sgRNAs')) +
+    geom_text(aes(label = number_of_genes, y = number_of_genes / 2), size = 10) +
+    theme(axis.text.x = element_text(size = 23),
+        axis.text.y = element_text(size = 30),
+        axis.title.y = element_text(size = 30, vjust=0.5, margin = margin(r = 20)),
+        legend.title = element_text(size = 25),
+        legend.text = element_text(size = 25),
+        plot.margin = margin(1, 1, 1, 1)) +
+    scale_fill_manual(values = custom_colors,
+                      name = 'Gene symbol in sgRNA ID',
+                      labels = c('match' = 'match with exon annotation', 
+                                 'mismatch' = 'not match with exon annotation')) +
+    theme(legend.key.size = unit(1.5, "cm"))
+
+barplot
+
+ggsave(
+    path = './',
+    width = 17,
+    height = 10,
+    dpi = 300,
+    plot = barplot,
+    filename = paste('histogram_exon_annotation_2.png', sep = ''))
+
+
+```

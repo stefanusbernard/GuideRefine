@@ -13,107 +13,66 @@ output:
 ```{r setup, include=FALSE}
 
 library(tidyverse)
-library(crisprDesign)
-library(crisprBowtie)
-library(crisprBase)
-library(readxl)
-library(BSgenome.Hsapiens.UCSC.hg38)
-bsgenome <- BSgenome.Hsapiens.UCSC.hg38
-
-devtools::install_github("crisprVerse/crisprDesignData")
+library(VennDiagram)
 
 ```
 
-Import sgRNA library data
+# Import sgRNA library data
 
 ```{r}
 # import sample sgRNA library
-data <- read_tsv('./public_crispr_library/broadgpp-brunello-library-contents.tsv', col_names = FALSE)
-colnames(data) <- c('sgRNA', 'spacer', 'gene')
-data
+
+import_sgrna_library <- function(data_dir) {
+  library <- read_tsv(data_dir, col_names = FALSE)
+  colnames(library) <- c('sgRNA', 'spacer', 'gene')
+  return(library)
+}
+
+brunello <- import_sgrna_library('./public_crispr_library/broadgpp-brunello-library-contents.tsv')
+toronto <- import_sgrna_library('./public_crispr_library/tkov3_guide_sequence.tsv')
+cellecta_M1 <- import_sgrna_library('./cellecta_library/sample_M1_150K.tsv')
+cellecta_M2 <- import_sgrna_library('./cellecta_library/sample_M2_150K.tsv')
+cellecta_M3 <- import_sgrna_library('./cellecta_library/sample_M3_150K.tsv')
 
 ```
 
-Building a guideset object
+# Combine Cellecta and remove duplicates
 
 ```{r}
-data(SpCas9, package = "crisprBase")
-crisprNuclease <- SpCas9
-crisprNuclease
-```
-
-Alignment to Human Reference Genome
-
-```{r}
-spacers_sequence <- c(unique(data$spacer))
-bowtie_index <- file.path('./bowtie_index', 'hg38')
-aln <- runCrisprBowtie(spacers_sequence,
-                                    mode = 'spacer',
-                                    bsgenome = BSgenome.Hsapiens.UCSC.hg38,
-                                    crisprNuclease = crisprNuclease,
-                                    n_mismatches = 2,
-                                    canonical = TRUE,
-                                    bowtie_index = bowtie_index)
-      
-```
-
-Only keep alignments for standard chromosome
-
-```{r}
-chrs <- paste0("chr",c(1:22, "X", "Y"))
-aln <- aln[aln$chr %in% chrs,,drop=FALSE]
-```
-
-Add genomic coordinates to the dataframe
-
-```{r}
-wh <- match(data$spacer, aln$spacer)
-data$chr <- aln$chr[wh]
-data$pam_site <- aln$pam_site[wh]
-data$pam <- aln$pam[wh]
-data$strand <- aln$strand[wh]
-head(data)
-```
-
-Filter guides that dont have a match to the genome
-
-```{r}
-data <- data[!is.na(data$pam_site),,drop=FALSE]
-```
-
-Create unique ID for each spacer sequence
-
-```{r}
-ids <- paste0("gRNA_", seq_len(nrow(data)))
-head(ids)
-```
-
-Build Guideset object
-
-```{r}
-gs <- GuideSet(ids=ids,
-               protospacers=data$spacer,
-               pams=data$pam,
-               pam_site=data$pam_site,
-               seqnames=data$chr,
-               strand=data$strand,
-               CrisprNuclease=crisprNuclease,
-               bsgenome=bsgenome)
-gs$gene_symbol <- data$gene_symbol
+cellecta <- rbind(cellecta_M1, cellecta_M2, cellecta_M3)
+cellecta <- cellecta %>%
+  arrange(sgRNA) %>%
+  distinct()
 
 ```
 
-Off-target Characterization
+# Compare the sequences between three libraries
 
 ```{r}
+sgRNA_similarity <- venn.diagram(
+    x = list(
+        brunello$sgRNA,
+        toronto$sgRNA,
+        cellecta$sgRNA
+    ),
+    category.names = c("Brunello \n 77K sgRNAs", "Toronto Knockout V3 \n 71K sgRNAs", "Cellecta \n 150K sgRNAs"),
+    filename = NULL,
+    output = TRUE,
+    fill = c("powderblue", "mistyrose", "lightgreen"),
+    alpha = 0.5,
+    print.mode = c('raw', 'percent'),
+    cex = 2,
+    cat.cex = 2,
+    cat.pos = c(-20, 20, 180),
+    cat.dist = c(0.1, 0.1, 0.1)
+)
 
-data(txdb_human, package = 'crisprDesignData')
-txObject <- txdb_human
-gs <- addSpacerAlignments(gs,
-                          txObject=txObject,
-                          aligner="bowtie",
-                          aligner_index=bowtie_index,
-                          bsgenome=bsgenome,
-                          n_mismatches=2)
+ggsave(
+    path = './',
+    width = 12,
+    height = 10,
+    dpi = 300,
+    plot = sgRNA_similarity,
+    filename = paste('VennDiagram_sgRNAs_similarity_percentage.png', sep = ''))
 
 ```
