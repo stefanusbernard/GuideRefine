@@ -43,6 +43,8 @@ The current HGNC dataset were retrieved from https://storage.googleapis.com/publ
 ```{r install required packages, include = FALSE}
 
 setwd(getwd())
+source('sgRNA_library_refining_functions.R')
+
 list_packages_bioconductor <- c('crisprBase',
                                 'crisprBowtie',
                                 'BSgenome.Hsapiens.UCSC.hg38',
@@ -77,17 +79,6 @@ library(directlabels)
 library(tidyverse)
 library(knitr)
 library(xlsx)
-
-```
-
-```{r List of functions, include = FALSE}
-
-# function to track the number of sgRNAs, number of genes, number of alignments, and notes
-function_df_count <- function(df_count, count_sgrna, num_genes, num_alignments, notes){
-  df_count <- rbind(df_count, c(count_sgrna, num_genes, num_alignments, notes))
-  kable(df_count)
-  return(df_count)
-}
 
 ```
 
@@ -186,7 +177,7 @@ track_table <- function_df_count(track_table,
 ```{r Select original gene list and remove any alignment to non standard chromosome, include = FALSE}
 gene_original <- c(unique(library_alignment$gene))
 
-
+`%notin%` <- Negate(`%in%`)
 list_chromosome <- paste0('chr', c(1:22, 'X', 'Y'))
 library_alignment <- library_alignment %>%
   filter(chr %in% list_chromosome | is.na(chr))
@@ -196,190 +187,83 @@ library_alignment <- library_alignment %>%
 ## Report of Multi-target sgRNAs
 
 ```{r Find multi-target sgRNAs, include = FALSE}
-# multi-target sgRNA: sgRNA aligned to multiple locations with 0 mismatch
-# count the number of sgRNA dropped per gene due to multi-target sgRNA
-`[multi-target sgRNA] count dropped guides per gene` <- library_alignment %>%
-  filter(n_mismatches == 0) %>%
-  select(sgRNA, gene) %>%
-  count(sgRNA, gene) %>%
-  dplyr::rename('Frequency' = 'n') %>%
-  filter(Frequency > 1)
+# detect any multi-target sgRNAs
+result_multi_target_sgrna <- multi_target_sgrna(library_alignment)
 
-`[multi-target sgRNA] list guides` <- c(`[multi-target sgRNA] count dropped guides per gene`$sgRNA)
-
-`dropped due to [multi-target]` <- `[multi-target sgRNA] count dropped guides per gene` %>%
-  count(gene) %>%
-  dplyr::rename('multi-target sgRNA' = 'n')
-
-```
-
-```{r Discard multi-target sgRNAs and select only standard chromosome, include = FALSE}
-
-`%notin%` <- Negate(`%in%`)
-
+# remove multi-target sgRNAs
 library_alignment <- library_alignment %>%
-  filter(sgRNA %notin% `[multi-target sgRNA] list guides`) %>%
-  filter(chr %in% list_chromosome | is.na(chr))
+  filter(sgRNA %notin% result_multi_target_sgrna$list_guides)
 
-```
-
-```{r Find genes lost due to multi-target sgRNAs, include = FALSE}
-
+# genes lost due to multi-target sgRNAs
 genes_lost_multi_target_sgrna <- setdiff(gene_original, unique(library_alignment$gene))
+
+# differences between gene original and gene lost
 gene_original <- setdiff(gene_original, genes_lost_multi_target_sgrna)
 
-```
-
-[**Genes lost due to multi-target sgRNAs**]{style="color:red"}
-
-```{r Genes lost due to multi-target sgRNAs, echo = FALSE}
+# number of gene lost due to multi-target sgRNAs
 print(paste('Number of genes lost due to multi-target sgRNAs: ', length(genes_lost_multi_target_sgrna), sep = ''))
+
 ```
 
 ```{r, include = FALSE}
+# update track table
 track_table <- function_df_count(track_table,
                                  count_sgrna = length(unique(library_alignment$sgRNA)),
                                  num_genes = length(unique(library_alignment$gene)),
                                  num_alignments = length(library_alignment$sgRNA),
-                                 notes = paste(length(`[multi-target sgRNA] list guides`), ' multi-target guides discarded'))
+                                 notes = paste(length(result_multi_target_sgrna$list_guides), ' multi-target guides discarded'))
 ```
 
 ## Report of sgRNA aligned with single mismatch
 
 ```{r Find sgRNA aligned with single mismatch, include = FALSE}
+# detect any single mismatch sgRNA
+result_single_mismatch_sgrna <- single_mismatch_sgrna(library_alignment)
 
-# count the number of multi-target sgRNAs
-`[single mismatch sgRNA] count dropped guides per gene` <- library_alignment %>%
-  filter(n_mismatches == 1) %>%
-  count(sgRNA, gene) %>%
-  dplyr::rename('Frequency' = 'n')
-
-`[single mismatch sgRNA] list guides` <- c(unique(`[single mismatch sgRNA] count dropped guides per gene`$sgRNA))
-
-`dropped due to [single-mismatch]` <- `[single mismatch sgRNA] count dropped guides per gene` %>%
-  count(gene) %>%
-  dplyr::rename('single mismatch sgRNA' = 'n')
-
-```
-
-```{r Discard sgRNA aligned with single mismatch, include = FALSE}
+# remove single mismatch sgRNAs
 library_alignment <- library_alignment %>%
-  filter(sgRNA %notin% `[single mismatch sgRNA] list guides`)
+  filter(sgRNA %notin% result_single_mismatch_sgrna$list_guides)
 
-```
-
-```{r Find genes lost due to single mismatch sgRNAs, include = FALSE}
-
+# genes lost due to single mismatch sgRNA
 genes_lost_single_mismatch_sgrna <- setdiff(gene_original, unique(library_alignment$gene))
+
+# differences between gene original and genes lost
 gene_original <- setdiff(gene_original, genes_lost_single_mismatch_sgrna)
 
-```
-
-[**Genes lost due to single-mismatch sgRNAs**]{style="color:red"}
-
-```{r Genes lost due to single-mismatch sgRNAs, echo = FALSE}
-
+# number of genes lost due to single mismatch sgRNAs
 print(paste('Number of genes lost due to single mismatch sgRNAs: ', length(genes_lost_single_mismatch_sgrna), sep = ''))
-
 ```
 
 ```{r, include = FALSE}
+# update track table
 track_table <- function_df_count(track_table,
                                  count_sgrna = length(unique(library_alignment$sgRNA)),
                                  num_genes = length(unique(library_alignment$gene)),
                                  num_alignments = length(library_alignment$sgRNA),
-                                 notes = paste(length(`[single mismatch sgRNA] list guides`), ' single mismatch sgRNA discarded'))
+                                 notes = paste(length(result_single_mismatch_sgrna$list_guides), ' single mismatch sgRNA discarded'))
 ```
 
 ## Report of sgRNA aligned with double mismatches at the PAM distal
 
 **sgRNAs aligned with double mismatch at PAM distal site may able to tolerate the off-target activity**
 
-```{r Find sgRNA location, PAM sites, and cut site, include = FALSE}
-# cut position, start position, end position, pam end position are relative to the pam start position
-
-library_alignment <- library_alignment %>% 
-  dplyr::rename(pam_start = pam_site) %>%
-  mutate(
-  pam_start = ifelse(strand == '+', pam_start, pam_start-2),
-  pam_end = ifelse(strand == '+', pam_start+2, pam_start+2),
-  start_pos = ifelse(strand == '+', pam_start-21, pam_start+3),
-  end_pos = ifelse(strand == '+', pam_start-1, pam_start+23),
-  cut_pos = ifelse(strand == '+', pam_start-4, pam_start+5)) %>%
-  relocate(pam_start, .after = cut_pos) %>%
-  relocate(start_pos, .before = cut_pos) %>%
-  relocate(end_pos, .after = start_pos) %>%
-  relocate(pam_end, .after = pam_start)
-
-```
-
 ```{r Find sgRNAs with 2 mismatches alignments, include = FALSE}
 
+# detect any pam-distal double mismatch sgRNA
+result_pam_distal_double_mismatch <- pam_distal_double_mismatch(library_alignment)
+
+# remove pam-distal double mismatch sgRNA
 library_alignment <- library_alignment %>%
-  rowwise() %>%
-  mutate(
-    mismatch_loc = list(which(strsplit(spacer, '')[[1]] != strsplit(protospacer, '')[[1]]))) %>%
-  mutate(
-    type = 
-      if_else(is.na(mismatch_loc[1]) | mismatch_loc[1] == 0,'perfect',
-      if_else(strand == '+' & (mismatch_loc[1] < 3 & mismatch_loc[2] < 3),'pam-distal double mismatch',
-      if_else(strand == '-' & (mismatch_loc[1] > 18 & mismatch_loc[2] > 18),'pam-distal double mismatch',
-          'double mismatch'
-        )
-      )
-    )
-  )
+  filter(sgRNA %notin% result_pam_distal_double_mismatch$list_guides)
 
-double_mismatch_freq <- library_alignment %>%
-  count(type) %>%
-  dplyr::rename('how many alignments' = 'n')
-print(double_mismatch_freq)
+# genes lost due to pam-distal double mismatch sgRNA
+genes_lost_pam_distal_double_mismatch_sgrna <- setdiff(gene_original, unique(library_alignment$gene))
 
-pam_distal_double_mismatch <- library_alignment %>%
-  filter(type == 'pam-distal double mismatch')
+# differences between gene original and genes lost
+gene_original <- setdiff(gene_original, genes_lost_pam_distal_double_mismatch_sgrna)
 
-paste('total sgRNAs with pam distal double mismatch: ', length(unique(pam_distal_double_mismatch$sgRNA)))
-paste('total alignments with pam distal double mismatch: ', length(pam_distal_double_mismatch$sgRNA))
-
-pam_distal_double_mismatch 
-
-`[PAM-distal double mismatch] count dropped guides per gene` <- pam_distal_double_mismatch %>%
-  select(sgRNA, gene) %>%
-  count(sgRNA, gene) %>%
-  dplyr::rename('Frequency' = 'n')
-  
-`dropped due to [PAM-distal double mismatch]` <- `[PAM-distal double mismatch] count dropped guides per gene` %>%
-  count(gene) %>%
-  dplyr::rename('PAM distal double mismatch' = 'n')
-
-`[PAM-distal double mismatch] list guides` <- c(unique(`[PAM-distal double mismatch] count dropped guides per gene`$sgRNA))
-
-```
-
-```{r Discard sgRNA aligned with double mismatches at PAM distal, include = FALSE}
-
-library_alignment <- library_alignment %>%
-  filter(sgRNA %notin% pam_distal_double_mismatch$sgRNA)
-
-paste('count sgRNAs: ', length(unique(library_alignment$sgRNA)))
-paste('alignments left after dropping sgRNAs with pam distal double mismatch:', length(library_alignment$sgRNA))
-
-print(length(library_alignment$n_mismatches[library_alignment$n_mismatches] > 1))
-
-```
-
-```{r Find genes lost due to PAM distal double mismatches, include = FALSE}
-
-genes_lost_pam_mismatch_sgrna <- setdiff(gene_original, unique(library_alignment$gene))
-gene_original <- setdiff(gene_original, genes_lost_pam_mismatch_sgrna)
-
-```
-
-[**Genes lost due to PAM distal double mismatch sgRNAs**]{style="color:red"}
-
-```{r Genes lost due to PAM distal double mismatch sgRNAs, echo = FALSE}
-
-print(paste('Number of genes lost due to PAM distal double mismatch sgRNAs: ', length(genes_lost_pam_mismatch_sgrna), sep = ''))
+# number of genes lost due to single mismatch sgRNAs
+print(paste('Number of genes lost due to PAM-distal double mismatch sgRNAs: ', length(genes_lost_pam_distal_double_mismatch_sgrna), sep = ''))
 
 ```
 
@@ -390,7 +274,7 @@ track_table <- function_df_count(track_table,
                                  count_sgrna = length(unique(library_alignment$sgRNA)),
                                  num_genes = length(unique(library_alignment$gene)),
                                  num_alignments = length(library_alignment$sgRNA),
-                                 notes = paste(length(`[PAM-distal double mismatch] list guides`), ' PAM-distal double mismatch sgRNA discarded'))
+                                 notes = paste(length(result_pam_distal_double_mismatch$list_guides), ' PAM-distal double mismatch sgRNA discarded'))
 ```
 
 ```{r Separate control or intron control sgRNA with the rest of sgRNA, include = FALSE}
@@ -819,11 +703,11 @@ sgRNA_library_refined <- rbind(sgRNA_library_control, sgRNA_library_cleaned)
 total_sgRNA_or_gene_lost <- data.frame('gene' = sgRNA_library$gene) %>%
   count(gene) %>%
   dplyr::rename('sgRNA number' = 'n') %>%
-  left_join(`dropped due to [multi-target]`, by = 'gene') %>%
+  left_join(dropped_due_to_multi_target, by = 'gene') %>%
   mutate(`multi-target sgRNA` = replace_na(`multi-target sgRNA`, 0)) %>%
-  left_join(`dropped due to [single-mismatch]`, by = 'gene') %>%
+  left_join(dropped_due_to_single_mismatch, by = 'gene') %>%
   mutate(`single mismatch sgRNA` = replace_na(`single mismatch sgRNA`, 0)) %>%
-  left_join(`dropped due to [PAM-distal double mismatch]`, by = 'gene') %>%
+  left_join(dropped_due_to_pam_distal_double_mismatch, by = 'gene') %>%
   mutate(`PAM distal double mismatch` = replace_na(`PAM distal double mismatch`, 0)) %>%
   left_join(sgRNA_not_target_anywhere, by = 'gene') %>%
   mutate(`sgRNA not target anywhere` = replace_na(`sgRNA not target anywhere`, 0)) %>%
