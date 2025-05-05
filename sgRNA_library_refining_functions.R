@@ -7,6 +7,16 @@ function_df_count <- function(df_count, count_sgrna, num_genes, num_alignments, 
   return(df_count)
 }
 
+# function to keep alignment only for normal chromosome
+alignment_normal_chr <- function(alignment_data) {
+    list_chromosome <- paste0('chr', c(1:22, 'X', 'Y'))
+    alignment_data <- alignment_data %>%
+        filter(chr %in% list_chromosome | is.na(chr))
+
+    return(alignment_data)    
+}
+
+
 # function to remove multi-target sgRNA
 multi_target_sgrna <- function(alignment_data){
     
@@ -32,7 +42,7 @@ multi_target_sgrna <- function(alignment_data){
 
 # function to remove single mismatch sgRNA
 single_mismatch_sgrna <- function(alignment_data) {
-    single_mismatch_sgRNA_count_dropped_guides_per_gene <- library_alignment %>%
+    single_mismatch_sgRNA_count_dropped_guides_per_gene <- alignment_data %>%
         filter(n_mismatches == 1) %>%
         count(sgRNA, gene) %>%
         dplyr::rename('Frequency' = 'n')

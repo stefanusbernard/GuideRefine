@@ -1,0 +1,182 @@
+---
+title: "Compare sgRNA Library performance"
+author: "Author: Stefanus Bernard"
+date: "Date: `r format(Sys.time(), '%d %B %Y')`"
+output: 
+  html_document :
+    theme : cerulean
+    toc : true
+    toc_float : true
+    number_section : true
+---
+
+```{r setup, include=FALSE}
+
+library(tidyverse)
+library(VennDiagram)
+library(ggvenn)
+source('sgRNA_library_refining_functions.R')
+
+```
+
+# Import sgRNA library data
+
+```{r}
+# import sample sgRNA library
+
+import_sgrna_library <- function(data_dir) {
+  library <- read_tsv(data_dir, col_names = FALSE)
+  colnames(library) <- c('sgRNA', 'spacer', 'gene')
+  return(library)
+}
+
+brunello <- import_sgrna_library('./public_crispr_library/broadgpp-brunello-library-contents.tsv')
+toronto <- import_sgrna_library('./public_crispr_library/tkov3_guide_sequence.tsv')
+cellecta_M1 <- import_sgrna_library('./cellecta_library/sample_M1_150K.tsv')
+cellecta_M2 <- import_sgrna_library('./cellecta_library/sample_M2_150K.tsv')
+cellecta_M3 <- import_sgrna_library('./cellecta_library/sample_M3_150K.tsv')
+
+```
+
+# Combine Cellecta and remove duplicates
+
+```{r}
+cellecta <- rbind(cellecta_M1, cellecta_M2, cellecta_M3)
+cellecta <- cellecta %>%
+  arrange(sgRNA) %>%
+  distinct()
+
+```
+
+
+# A venn diagram function to compare the similarity between three libraries
+
+```{r}
+
+venn_diagram <- function(set1, set2, name_set1, name_set2, color1, color2, name_venn) {
+  only_set1 <- length(setdiff(set1, set2))
+  only_set2 <- length(setdiff(set2, set1))
+  both_sets  <- length(intersect(set1, set2))
+
+  totalset1 <- only_set1 + both_sets
+  totalset2 <- only_set2 + both_sets
+
+  pct_set1 <- round((only_set1 / totalset1) * 100, 2)
+  pct_set2 <- round((only_set2 / totalset2) * 100, 2)
+  pct_overlap_set1 <- round((both_sets / totalset1) * 100, 2)
+  pct_overlap_set2 <- round((both_sets / totalset2) * 100, 2)
+
+  sgRNA_similarity <- venn.diagram(
+        x = list(set1, set2),
+        category.names = c(name_set1, name_set2),
+        filename = NULL,  
+        fill = c(color1, color2),
+        alpha = 0.5,
+        cex = 0,  # Set text size to 0 to hide numbers
+        cat.cex = 0.75,  # Set category label size
+        cat.pos = c(-2, 2),  # Adjust category label positions
+        cat.dist = c(0.05, 0.05),  # Adjust category label distances
+        lwd = 2
+  )
+
+  png(filename = name_venn, width = 1250, height = 1250, res = 300)
+  grid.newpage()
+  grid.draw(sgRNA_similarity)
+
+  grid.text(label = paste0(only_set2, '\n', pct_set1, '%'), x = 0.25, y = 0.50, gp = gpar(fontsize = 10))
+  grid.text(label = paste0(only_set1, '\n', pct_set2, '%'), x = 0.75, y = 0.50, gp = gpar(fontsize = 10))
+  grid.text(label = paste0(pct_overlap_set1, '%', '\nor\n', pct_overlap_set2, '%'), x = 2.5, y = 0.50, gp = gpar(fontsize = 7))
+
+  dev.off()
+}
+
+
+```
+
+# compare the similarity of all sequences between three libraries
+
+```{r}
+venn_diagram(brunello$spacer, toronto$spacer, "Brunello \n 77K sgRNAs", "Toronto V3 \n 71K sgRNAs", 'powderblue', 'mistyrose', 'VennDiagram_sgRNAs_brunello_toronto.png')
+venn_diagram(brunello$spacer, cellecta$spacer, "Brunello \n 77K sgRNAs", "Cellecta \n 150K sgRNAs", 'powderblue', 'lightgreen', 'VennDiagram_sgRNAs_brunello_cellecta.png') 
+venn_diagram(toronto$spacer, cellecta$spacer, "Toronto V3 \n 77K sgRNAs", "Cellecta \n 150K sgRNAs", 'mistyrose', 'lightgreen', 'VennDiagram_sgRNAs_toronto_cellecta.png') 
+```
+
+# import alignment data from all libraries
+
+```{r}
+
+brunello_alignment <- read_csv('./object_intermediate/broadgpp-brunello-library-contents_aln.csv')
+toronto_alignment <- read_csv('./object_intermediate/tkov3_guide_sequence_aln.csv')
+cellecta_M1_alignment <- read_csv('./object_intermediate/sample_M1_150K_aln.csv')
+cellecta_M2_alignment <- read_csv('./object_intermediate/sample_M2_150K_aln.csv')
+cellecta_M3_alignment <- read_csv('./object_intermediate/sample_M3_150K_aln.csv')
+
+# combine all cellecta alignment
+cellecta_alignment <- rbind(cellecta_M1_alignment, cellecta_M2_alignment, cellecta_M3_alignment)
+cellecta_alignment <- cellecta_alignment %>%
+  arrange(sgRNA) %>%
+  distinct()
+
+# keep alignment only for normal chromosome
+brunello_alignment <- alignment_normal_chr(brunello_alignment)
+toronto_alignment <- alignment_normal_chr(toronto_alignment)
+cellecta_alignment <- alignment_normal_chr(cellecta_alignment)
+
+```
+
+# detect multi-target sgRNAs
+
+```{r}
+
+brunello_multi_target <- multi_target_sgrna(brunello_alignment)
+brunello_single_mismatch <- single_mismatch_sgrna(brunello_alignment)
+brunello_pam_mismatch <- pam_distal_double_mismatch(brunello_alignment)
+
+brunello_off_target <- unique(union(brunello_pam_mismatch$list_guides, unique(union(brunello_multi_target$list_guides, brunello_single_mismatch$list_guides))))
+
+toronto_multi_target <- multi_target_sgrna(toronto_alignment)
+toronto_single_mismatch <- single_mismatch_sgrna(toronto_alignment)
+toronto_pam_mismatch <- pam_distal_double_mismatch(toronto_alignment)
+
+toronto_off_target <- unique(union(toronto_pam_mismatch$list_guides, unique(union(toronto_multi_target$list_guides, toronto_single_mismatch$list_guides))))
+
+cellecta_multi_target <- multi_target_sgrna(cellecta_alignment)
+cellecta_single_mismatch <- single_mismatch_sgrna(cellecta_alignment)
+cellecta_pam_mismatch <- pam_distal_double_mismatch(cellecta_alignment)
+
+cellecta_off_target <- unique(union(cellecta_pam_mismatch$list_guides, unique(union(cellecta_multi_target$list_guides, cellecta_single_mismatch$list_guides))))
+
+brunello_off_target_spacer <- brunello %>%
+  filter(sgRNA %in% brunello_off_target)
+
+toronto_off_target_spacer <- toronto %>%
+  filter(sgRNA %in% toronto_off_target)
+
+cellecta_off_target_spacer <- cellecta %>%
+  filter(sgRNA %in% cellecta_off_target)
+
+off_target_venn <- venn.diagram(
+    x = list(
+        cellecta_off_target_spacer$spacer,
+        brunello_off_target_spacer$spacer
+    ),
+    category.names = c("Cellecta \n 150K sgRNAs", "Brunello \n 77K sgRNAs"),
+    filename = NULL,
+    output = TRUE,
+    fill = c("lightgreen", "powderblue"),
+    alpha = 0.5,
+    cex = 2.5,
+    cat.cex = 2,
+    cat.pos = c(-20, 20),
+    cat.dist = c(0.1, 0.1)
+)
+
+ggsave(
+    path = './',
+    width = 10,
+    height = 10,
+    dpi = 300,
+    plot = off_target_venn,
+    filename = paste('VennDiagram_off_target_cellecta_brunello.png', sep = ''))
+
+```

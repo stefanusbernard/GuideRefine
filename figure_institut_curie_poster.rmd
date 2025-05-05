@@ -16,6 +16,7 @@ library(tidyverse)
 library(readxl)
 library(VennDiagram)
 library(grid)
+source('sgRNA_library_refining_functions.R')
 ```
 
 ```{r}
@@ -419,3 +420,4 @@ ggsave(
 
 
 ```
+
