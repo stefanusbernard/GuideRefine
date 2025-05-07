@@ -188,7 +188,9 @@ make_granges_from_alignment_data <- function(alignment_data){
                 strand, 
                 mismatch = n_mismatches) %>%
         mutate(End = Start) %>%
-        GenomicRanges::makeGRangesFromDataFrame(seqinfo = genome_info, keep.extra.columns = T)
+        GenomicRanges::makeGRangesFromDataFrame(seqinfo = genome_info, 
+                                                keep.extra.columns = T,
+                                                na.rm = TRUE)
     
     return(guide_aln_granges)
 }

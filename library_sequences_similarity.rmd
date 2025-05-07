@@ -180,26 +180,30 @@ ggsave(
 # Analysis of multi-target sgRNAs
 
 ```{r}
-source('sgRNA_library_refining_functions.R')
+
+# identification of sgRNAs
 
 brunello_multi_target <- multi_target_sgrna(brunello_alignment)
 toronto_multi_target <- multi_target_sgrna(toronto_alignment)
 cellecta_multi_target <- multi_target_sgrna(cellecta_alignment)
 
+brunello_single_mismatch <- single_mismatch_sgrna(brunello_alignment)
+toronto_single_mismatch <- single_mismatch_sgrna(brunello_alignment)
+cellecta_single_mismatch <- single_mismatch_sgrna(brunello_alignment)
+
+brunello_single_mismatch_list_guides <- setdiff(brunello_single_mismatch$list_guides, brunello_multi_target$list_guides)
+toronto_single_mismatch_list_guides <- setdiff(toronto_single_mismatch$list_guides, toronto_multi_target$list_guides)
+cellecta_single_mismatch_list_guides <- setdiff(cellecta_single_mismatch$list_guides, cellecta_multi_target$list_guides)
+
+# alignment data
+
 brunello_alignment_multi_target <- brunello_alignment %>% filter(sgRNA %in% brunello_multi_target$list_guides)
 toronto_alignment_multi_target <- toronto_alignment %>% filter(sgRNA %in% toronto_multi_target$list_guides)
 cellecta_alignment_multi_target <- cellecta_alignment %>% filter(sgRNA %in% cellecta_multi_target$list_guides)
 
-annotate_multi_target <- function(alignment_data) {
-  ccds <- read_ccds_data('CCDS_20250112.txt')
-  transformed_ccds <- transform_gene_annotation_ccds(ccds)
-  modified_alignment <- add_cut_pos_pam_pos(alignment_data)
-  multi_target_granges <- make_granges_from_alignment_data(modified_alignment)
-  gene_df_overlap <- find_overlaps_gene_annotation_and_alignment(multi_target_granges, transformed_ccds$gene_annot_granges_df)
-
-  return(gene_df_overlap)
-    
-}
+brunello_alignment_single_mismatch <- brunello_alignment %>% filter(sgRNA %in% brunello_single_mismatch_list_guides)
+toronto_alignment_single_mismatch <- toronto_alignment %>% filter(sgRNA %in% toronto_single_mismatch_list_guides)
+cellecta_alignment_single_mismatch <- cellecta_alignment %>% filter(sgRNA %in% cellecta_single_mismatch_list_guides)
 
 ```
 
@@ -207,7 +211,18 @@ annotate_multi_target <- function(alignment_data) {
 
 ```{r}
 
-multi_target_perfect_match <- function(alignment_data, library){
+annotate_off_target <- function(alignment_data) {
+  ccds <- read_ccds_data('CCDS_20250112.txt')
+  transformed_ccds <- transform_gene_annotation_ccds(ccds)
+  modified_alignment <- add_cut_pos_pam_pos(alignment_data)
+  off_target_granges <- make_granges_from_alignment_data(modified_alignment)
+  gene_df_overlap <- find_overlaps_gene_annotation_and_alignment(off_target_granges, transformed_ccds$gene_annot_granges_df)
+
+  return(gene_df_overlap)
+    
+}
+
+off_target_analysis <- function(alignment_data, num_mismatch, library, library_name){
   gene_df <- annotate_multi_target(alignment_data)
   gene_df <- gene_df %>%
     dplyr::rename('actual_chr' = 'chr',
@@ -221,30 +236,63 @@ multi_target_perfect_match <- function(alignment_data, library){
     dplyr::rename('sgrna' = 'sgRNA') %>%
     left_join(gene_df, by = join_by(sgrna, spacer, protospacer, cut_pos)) %>%
     select(sgrna, spacer, protospacer, gene, chr, n_mismatches, cut_pos, actual_chr, actual_gene) %>%
-    filter(n_mismatches == 0) %>%
+    filter(n_mismatches == num_mismatch) %>%
     mutate(target = case_when(gene == actual_gene ~ 'actual gene',
                             gene != actual_gene ~ 'other protein coding genes',
                             is.na(actual_gene) ~ 'random genomic locations')) %>%
-    filter(target != 'actual gene') %>%
+    filter(target != 'actual gene')
+
+  summary_target_df <- alignment_data_gene_df %>%
     select(sgrna, target) %>%
     group_by(sgrna) %>%
     mutate(target = ifelse(n() > 1, 'random genomic locations and other protein coding genes', target)) %>%
     ungroup() %>%
     distinct()
   
-  calculate_freq_table <- alignment_data_gene_df %>%
+  calculate_freq_table <- summary_target_df %>%
     select(target) %>%
     count(target) %>%
     dplyr::rename('count_sgrna' = 'n') %>%
     arrange(desc(count_sgrna)) %>%
-    mutate(percent = round(count_sgrna/length(library)*100 ,2))
+    mutate(percent = round(count_sgrna/length(library$sgRNA)*100 ,2),
+           library = library_name)
 
   return(list(
     aln_data_df = alignment_data_gene_df,
+    summary_df = summary_target_df, 
     freq_table = calculate_freq_table))
 
 }
 
-test <- multi_target_perfect_match(brunello_alignment_multi_target)
+brunello_multi_target_analysis <- off_target_analysis(brunello_alignment_multi_target, 0, brunello, 'brunello')
+toronto_multi_target_analysis <- off_target_analysis(toronto_alignment_multi_target, 0, toronto, 'toronto')
+cellecta_multi_target_analysis <- off_target_analysis(cellecta_alignment_multi_target, 0, cellecta, 'cellecta')
+
+brunello_single_mismatch_analysis <- off_target_analysis(brunello_alignment_single_mismatch, 1, brunello, 'brunello')
+toronto_single_mismatch_analysis <- off_target_analysis(toronto_alignment_single_mismatch, 1, toronto, 'toronto')
+cellecta_single_mismatch_analysis <- off_target_analysis(cellecta_alignment_single_mismatch, 1, cellecta, 'cellecta')
+
+```
+
+```{r}
+
+table_multi_target <- rbind(brunello_multi_target_analysis$freq_table,
+                            toronto_multi_target_analysis$freq_table,
+                            cellecta_multi_target_analysis$freq_table)
+table_multi_target <- table_multi_target %>%
+  arrange(target)
+
+table_single_mismatch <- rbind(brunello_single_mismatch_analysis$freq_table,
+                              toronto_single_mismatch_analysis$freq_table,
+                              cellecta_single_mismatch_analysis$freq_table)
+table_single_mismatch <- table_single_mismatch %>%
+  arrange(target)
+
+
+```
+
+# Paralog dataset
+
+```{r}
 
 ```
