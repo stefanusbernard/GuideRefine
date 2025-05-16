@@ -165,14 +165,15 @@ add_cut_pos_pam_pos <- function(alignment_data){
             pam_end = ifelse(strand == '+', pam_start+2, pam_start+2),
             start_pos = ifelse(strand == '+', pam_start-21, pam_start+3),
             end_pos = ifelse(strand == '+', pam_start-1, pam_start+23),
-            cut_pos = ifelse(strand == '+', pam_start-4, pam_start+5)) %>%
+            cut_pos = ifelse(strand == '+', pam_start-4, pam_start+5),
+            unique_aln_id = paste0('sgrna_aln_', row_number())) %>%
         relocate(pam_start, .after = cut_pos) %>%
         relocate(start_pos, .before = cut_pos) %>%
         relocate(end_pos, .after = start_pos) %>%
-        relocate(pam_end, .after = pam_start)
+        relocate(pam_end, .after = pam_start) %>%
+        relocate(unique_aln_id, .before = sgRNA)
 
     return(alignment_data)
-
 }
 
 make_granges_from_alignment_data <- function(alignment_data){
@@ -180,7 +181,8 @@ make_granges_from_alignment_data <- function(alignment_data){
     genome_info <- GenomeInfoDb::Seqinfo(genome = "hg38")[list_chromosome]
 
     guide_aln_granges <- alignment_data %>%
-        select(id = sgRNA, 
+        select(unique_id = unique_aln_id,
+                id = sgRNA, 
                 Spacer = spacer, 
                 Protospacer = protospacer, 
                 Chr = chr, 
@@ -199,17 +201,18 @@ find_overlaps_gene_annotation_and_alignment <- function(guide_aln_granges, gene_
     hits <- GenomicRanges::findOverlaps(guide_aln_granges, gene_annot_granges, ignore.strand=T) %>% as_tibble
 
     gene_df <- hits %>%
-    transmute(sgrna = guide_aln_granges$id[queryHits],
-                spacer = guide_aln_granges$Spacer[queryHits],
-                protospacer = guide_aln_granges$Protospacer[queryHits],
-                mismatches = guide_aln_granges$mismatch[queryHits],
-                chr = GenomicRanges::seqnames(guide_aln_granges)[queryHits] %>% as.character() ,
-                cut_pos = GenomicRanges::start(guide_aln_granges)[queryHits] %>% as.integer(),
-                strand = GenomicRanges::strand(guide_aln_granges)[queryHits] %>% as.character(),
-                gene = gene_annot_granges$gene[subjectHits],
-                CDS_strand = GenomicRanges::strand(gene_annot_granges)[subjectHits] %>% as.character(),
-                CDS_start = GenomicRanges::start(gene_annot_granges)[subjectHits] %>% as.integer(),
-                CDS_end = GenomicRanges::end(gene_annot_granges)[subjectHits] %>% as.integer()) %>%
+    transmute(unique_aln_id = guide_aln_granges$unique_id[queryHits] %>% as.character(),
+              sgrna = guide_aln_granges$id[queryHits],
+              spacer = guide_aln_granges$Spacer[queryHits],
+              protospacer = guide_aln_granges$Protospacer[queryHits],
+              mismatches = guide_aln_granges$mismatch[queryHits],
+              chr = GenomicRanges::seqnames(guide_aln_granges)[queryHits] %>% as.character() ,
+              cut_pos = GenomicRanges::start(guide_aln_granges)[queryHits] %>% as.integer(),
+              strand = GenomicRanges::strand(guide_aln_granges)[queryHits] %>% as.character(),
+              gene = gene_annot_granges$gene[subjectHits],
+              CDS_strand = GenomicRanges::strand(gene_annot_granges)[subjectHits] %>% as.character(),
+              CDS_start = GenomicRanges::start(gene_annot_granges)[subjectHits] %>% as.integer(),
+              CDS_end = GenomicRanges::end(gene_annot_granges)[subjectHits] %>% as.integer()) %>%
     distinct()
 
     return(gene_df)

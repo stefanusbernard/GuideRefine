@@ -30,7 +30,7 @@ library(readxl)
 
 ```
 
-````{r Import HGNC dataset, include=FALSE}
+```{r Import HGNC dataset, include=FALSE}
 
 hgnc <- read_tsv(url('https://storage.googleapis.com/public-download-files/hgnc/tsv/tsv/hgnc_complete_set.txt'))
 hgnc_gene <- hgnc$symbol

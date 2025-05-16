@@ -67,11 +67,10 @@ multi_target <- c(brunello_multi_target, toronto_multi_target, cellecta_multi_ta
 single_mismatch <- c(brunello_single_mismatch, toronto_single_mismatch, cellecta_single_mismatch)
 pam_distal <- c(brunello_pam_distal, toronto_pam_distal, cellecta_pam_distal)
 
+library <- c("brunello", "toronto_v3", "cellecta")
+factor <- c(2,3,1)
 
-library <- c("brunello", "toronto v3", "cellecta")
-factor <- c(2, 3, 1)
-
-sum_dataframe <- data.frame(library, multi_target, single_mismatch, pam_distal, factor)
+sum_dataframe <- data.frame(library, multi_target, single_mismatch, pam_distal)
 
 ```
 
@@ -79,21 +78,52 @@ sum_dataframe <- data.frame(library, multi_target, single_mismatch, pam_distal, 
 
 ```{r}
 
-barplot <- ggplot(sum_dataframe, aes(x = reorder(library, factor), y = pam_distal)) +
-    geom_histogram(stat = "identity", fill = c("powderblue", "mistyrose", "lightgreen")) +
-    theme_minimal() +
-    labs(title = "", x = "", y = "") +
-    scale_x_discrete(labels=c('brunello' = 'Brunello \n 77K sgRNAs',
-                              'cellecta' = 'Cellecta \n 150K sgRNAs',
-                              'toronto v3' = 'Toronto \nKnockout V3 \n 71K sgRNAs')) +
-    geom_text(aes(label = pam_distal), vjust=-0.5, size = 10) +
-    theme(axis.text.x = element_text(size = 30),
-        axis.text.y = element_text(size = 30),
-        axis.title.y = element_text(size = 30, vjust=0.5, margin = margin(r = 20))) +
-    ylim(0, 10)
-barplot
+# Reorder the library factor to ensure the bars are ordered as Cellecta, Brunello, and Toronto
+sum_dataframe_long <- sum_dataframe %>%
+    pivot_longer(cols = c("multi_target", "single_mismatch", "pam_distal"), 
+                 names_to = "category", 
+                 values_to = "percentage") %>%
+    mutate(category = factor(category, levels = c("multi_target", "single_mismatch", "pam_distal")),
+           library = factor(library, levels = c("cellecta", "brunello", "toronto_v3")))
 
+# Define custom colors for the libraries
+custom_colors <- c("cellecta" = "lightgreen", "brunello" = "powderblue", "toronto_v3" = "mistyrose")
+
+# Create the grouped multibar chart
+multi_bar_chart <- ggplot(sum_dataframe_long, aes(x = category, y = percentage, fill = library)) +
+    geom_bar(stat = "identity", position = position_dodge2(reverse = TRUE, padding = 0.2), width = 0.7) +
+    theme_bw() +
+    labs(title = "", x = "", y = "Percentage of sgRNAs (%)") +
+    scale_x_discrete(labels = c('multi_target' = 'Multi-target sgRNA',
+                                'single_mismatch' = 'Single mismatch sgRNA',
+                                'pam_distal' = 'PAM distal \n double mismatch sgRNA')) +
+    geom_text(aes(label = percentage), position = position_dodge2(width = 0.7, reverse = TRUE), vjust = -0.5, size = 12) +
+    theme(axis.text.x = element_text(size = 40, vjust = 0.7, colour = 'black'),
+          axis.text.y = element_text(size = 40),
+          axis.title.y = element_text(size = 40, vjust = 0.5, margin = margin(r = 20)),
+          legend.title = element_text(size = 40),
+          legend.text = element_text(size = 40),
+          plot.margin = margin(1, 1, 1, 1), 
+          line = element_line((size = 4), colour = 'black'),
+          legend.spacing.x = unit(1, 'cm')) +
+    scale_fill_manual(values = custom_colors,
+                      name = 'Library',
+                      breaks = c("cellecta", "brunello", "toronto_v3"),
+                      labels = c("cellecta" = "Cellecta", 
+                                 "brunello" = "Brunello", 
+                                 "toronto_v3" = "TKoV3"))
+
+multi_bar_chart
+
+ggsave(
+    path = './',
+    width = 30,
+    height = 15,
+    dpi = 300,
+    plot = multi_bar_chart,
+    filename = paste('multi_bar_chart_off_target.png', sep = ''))
 ```
+
 
 # Number of genes completely eliminated due to the multi-target sgRNAs
 
@@ -343,36 +373,39 @@ annotation <- c('match', 'mismatch', 'match', 'mismatch', 'match', 'mismatch')
 library_correction_report <- data.frame(library, annotation, number_of_genes)
 
 custom_colors <- c('match' = 'lightgreen', 'mismatch' = "mistyrose")
-
-barplot <- ggplot(library_correction_report, aes(x = reorder(library, -number_of_genes), y = number_of_genes, fill = annotation)) +
-    geom_bar(stat = "identity", width = 0.7) +
-    theme_minimal() +
-    labs(title = "", x = "", y = "number of genes") +
-    scale_x_discrete(labels=c('brunello' = 'Brunello \n 77K sgRNAs',
-                              'cellecta' = 'Cellecta \n 150K sgRNAs',
-                              'toronto' = 'Toronto \nKnockout V3 \n 71K sgRNAs')) +
-    geom_text(aes(label = number_of_genes, y = number_of_genes / 2), size = 10) +
-    theme(axis.text.x = element_text(size = 23),
-        axis.text.y = element_text(size = 30),
-        axis.title.y = element_text(size = 30, vjust=0.5, margin = margin(r = 20)),
-        legend.title = element_text(size = 25),
-        legend.text = element_text(size = 25),
-        plot.margin = margin(1, 1, 1, 1)) +
-    scale_fill_manual(values = custom_colors,
-                      name = 'Gene symbol in sgRNA ID',
-                      labels = c('match' = 'match with exon annotation', 
-                                 'mismatch' = 'not match with exon annotation')) +
-    theme(legend.key.size = unit(1.5, "cm"))
+library_correction_report <- library_correction_report %>%
+    mutate(annotation = factor(annotation, levels = c("mismatch", "match")))
+    barplot <- ggplot(library_correction_report, aes(x = reorder(library, -number_of_genes), y = number_of_genes, fill = annotation)) +
+        geom_bar(stat = "identity", width = 0.7) +
+        theme_bw(base_line_size = 15) +
+        labs(title = "", x = "", y = "Number of genes") +
+        scale_x_discrete(labels=c('brunello' = 'Brunello',
+                                'cellecta' = 'Cellecta',
+                                'toronto' = 'TKoV3')) +
+        geom_text(aes(label = number_of_genes), position = position_stack(vjust = 0.5), size = 15) +
+        theme(axis.text.x = element_text(size = 50, colour = 'black'),
+            axis.text.y = element_text(size = 50),
+            axis.title.y = element_text(size = 50, vjust=0.5, margin = margin(r = 20)),
+            legend.title = element_text(size = 50),
+            legend.text = element_text(size = 50),
+            line = element_line((size = 2), colour = 'black'),
+            plot.margin = margin(1, 1, 1, 1)) +
+        scale_fill_manual(values = custom_colors,
+                        name = 'Gene symbol in sgRNA ID',
+                        labels = c('match' = 'Approved symbol', 
+                                    'mismatch' = 'Previous/alias symbol')) +
+        theme(legend.key.size = unit(1.5, "cm")) +
+        scale_y_continuous(limits = c(0, 20000), breaks = seq(0, 20000, by = 5000))
 
 barplot
 
 ggsave(
     path = './',
-    width = 17,
-    height = 10,
+    width = 25,
+    height = 15,
     dpi = 300,
     plot = barplot,
-    filename = paste('histogram_exon_annotation.png', sep = ''))
+    filename = paste('histogram_exon_annotation_before.png', sep = ''))
 
 
 ```
@@ -390,34 +423,223 @@ custom_colors <- c('match' = 'lightgreen', 'mismatch' = "mistyrose")
 
 barplot <- ggplot(library_correction_report, aes(x = reorder(library, -number_of_genes), y = number_of_genes, fill = annotation)) +
     geom_bar(stat = "identity", width = 0.7) +
-    theme_minimal() +
+    theme_bw() +
     labs(title = "", x = "", y = "number of genes") +
-    scale_x_discrete(labels=c('brunello' = 'Brunello \n 77K sgRNAs',
-                              'cellecta' = 'Cellecta \n 150K sgRNAs',
-                              'toronto' = 'Toronto \nKnockout V3 \n 71K sgRNAs')) +
-    geom_text(aes(label = number_of_genes, y = number_of_genes / 2), size = 10) +
-    theme(axis.text.x = element_text(size = 23),
-        axis.text.y = element_text(size = 30),
-        axis.title.y = element_text(size = 30, vjust=0.5, margin = margin(r = 20)),
-        legend.title = element_text(size = 25),
-        legend.text = element_text(size = 25),
+    scale_x_discrete(labels=c('brunello' = 'Brunello',
+                              'cellecta' = 'Cellecta',
+                              'toronto' = 'TKoV3')) +
+    geom_text(aes(label = number_of_genes, y = number_of_genes / 2), size = 15) +
+    theme(axis.text.x = element_text(size = 50, colour = 'black'),
+        axis.text.y = element_text(size = 50),
+        axis.title.y = element_text(size = 50, vjust=0.5, margin = margin(r = 20)),
+        legend.title = element_text(size = 50),
+        legend.text = element_text(size = 50),
+        line = element_line((size = 2), colour = 'black'),
         plot.margin = margin(1, 1, 1, 1)) +
     scale_fill_manual(values = custom_colors,
                       name = 'Gene symbol in sgRNA ID',
-                      labels = c('match' = 'match with exon annotation', 
-                                 'mismatch' = 'not match with exon annotation')) +
-    theme(legend.key.size = unit(1.5, "cm"))
+                      labels = c('match' = 'Approved symbol', 
+                                 'mismatch' = 'Previous/alias symbol')) +
+    theme(legend.key.size = unit(1.5, "cm")) +
+    scale_y_continuous(limits = c(0, 20000), breaks = seq(0, 20000, by = 5000))
+
 
 barplot
 
 ggsave(
     path = './',
-    width = 17,
-    height = 10,
+    width = 25,
+    height = 15,
     dpi = 300,
     plot = barplot,
-    filename = paste('histogram_exon_annotation_2.png', sep = ''))
+    filename = paste('histogram_exon_annotation_after.png', sep = ''))
 
 
 ```
 
+# Original sgRNA library vs Refined sgRNA library percentage
+
+```{r}
+# import sample sgRNA library
+
+import_sgrna_library <- function(data_dir) {
+  library <- read_tsv(data_dir, col_names = FALSE)
+  colnames(library) <- c('sgRNA', 'spacer', 'gene')
+  return(library)
+}
+
+brunello <- import_sgrna_library('./public_crispr_library/broadgpp-brunello-library-contents.tsv')
+toronto <- import_sgrna_library('./public_crispr_library/tkov3_guide_sequence.tsv')
+cellecta_M1 <- import_sgrna_library('./cellecta_library/sample_M1_150K.tsv')
+cellecta_M2 <- import_sgrna_library('./cellecta_library/sample_M2_150K.tsv')
+cellecta_M3 <- import_sgrna_library('./cellecta_library/sample_M3_150K.tsv')
+
+# combined cellecta and remove duplicates
+cellecta <- rbind(cellecta_M1, cellecta_M2, cellecta_M3)
+cellecta <- cellecta %>%
+  arrange(sgRNA) %>%
+  distinct()
+
+refined_brunello <- import_sgrna_library('./output_cleaning/broadgpp-brunello-library-contents_65K_refined.tsv')
+refined_toronto <- import_sgrna_library('./output_cleaning/tkov3_guide_sequence_62K_refined.tsv')
+refined_cellecta_M1 <- import_sgrna_library('./output_cleaning/sample_M1_150K_48K_refined.tsv')
+refined_cellecta_M2 <- import_sgrna_library('./output_cleaning/sample_M2_150K_45K_refined.tsv')
+refined_cellecta_M3 <- import_sgrna_library('./output_cleaning/sample_M3_150K_42K_refined.tsv')
+
+refined_cellecta <- rbind(refined_cellecta_M1, refined_cellecta_M2, refined_cellecta_M3)
+refined_cellecta <- refined_cellecta %>%
+  arrange(sgRNA) %>%
+  distinct()
+
+percentage_sgrna <- function(original_library, refined_library) {
+    percentage = round(n_distinct(refined_library$sgRNA) / n_distinct(original_library$sgRNA) * 100, 2)
+    return(percentage)
+}
+
+percentage_sgrna_brunello <- percentage_sgrna(brunello, refined_brunello)
+percentage_sgrna_toronto <- percentage_sgrna(toronto, refined_toronto)
+percentage_sgrna_cellecta <- percentage_sgrna(cellecta, refined_cellecta)
+
+percentage_sgrna_removed_brunello <- 100 - percentage_sgrna_brunello
+percentage_sgrna_removed_toronto <- 100 - percentage_sgrna_toronto
+percentage_sgrna_removed_cellecta <- 100 - percentage_sgrna_cellecta
+
+library <- c('brunello', 'toronto', 'cellecta')
+
+# Create a data frame for plotting with both percentages
+percentage_existing <- c(percentage_sgrna_brunello, percentage_sgrna_toronto, percentage_sgrna_cellecta)
+percentage_removed <- c(percentage_sgrna_removed_brunello, percentage_sgrna_removed_toronto, percentage_sgrna_removed_cellecta)
+percentage_data <- data.frame(library, percentage_removed, percentage_existing)
+
+# Reshape data for stacked bar chart
+percentage_data_long <- percentage_data %>%
+    pivot_longer(cols = c("percentage_removed", "percentage_existing"), 
+                 names_to = "status", 
+                 values_to = "percentage")
+
+custom_colors <- c("percentage_removed" = "mistyrose", "percentage_existing" = "lightgreen")
+
+stacked_barplot <- ggplot(percentage_data_long, aes(x = factor(library, levels = c('cellecta', 'brunello', 'toronto')), y = percentage, fill = status)) +
+    geom_bar(stat = "identity", width = 0.7) +
+    theme_minimal() +
+    labs(title = "", x = "", y = "Percentage of sgRNAs (%)") +
+    scale_x_discrete(labels = c('brunello' = 'Brunello \n 77K sgRNAs',
+                                'cellecta' = 'Cellecta \n 150K sgRNAs',
+                                'toronto' = 'Toronto \nKnockout V3 \n 71K sgRNAs')) +
+    geom_text(aes(label = paste0(percentage, "%")), position = position_stack(vjust = 0.5), size = 10) +
+    theme(axis.text.x = element_text(size = 23),
+          axis.text.y = element_text(size = 30),
+          axis.title.y = element_text(size = 30, vjust = 0.5, margin = margin(r = 20)),
+          legend.title = element_text(size = 25),
+          legend.text = element_text(size = 25),
+          plot.margin = margin(1, 1, 1, 1)) +
+    scale_fill_manual(values = custom_colors,
+                      name = 'sgRNA Status',
+                      labels = c('percentage_existing' = 'Retained sgRNAs', 
+                                 'percentage_removed' = 'Eliminated sgRNAs')) +
+    theme(legend.key.size = unit(1.5, "cm"))
+
+stacked_barplot
+
+ggsave(
+    path = './',
+    width = 15,
+    height = 15,
+    dpi = 300,
+    plot = stacked_barplot,
+    filename = paste('stacked_barplot_sgRNA.png', sep = ''))
+
+
+```
+
+
+```{r}
+library(tidyverse)
+
+# library <- c('brunello', 'brunello', 'toronto', 'toronto', 'cellecta', 'cellecta')
+# number_of_genes <- c(16967, 1056, 16313, 1125, 17042, 1376)
+# annotation <- c('match', 'mismatch', 'match', 'mismatch', 'match', 'mismatch')
+# library <- c('brunello', 'toronto', 'cellecta')
+# number_of_genes <- c(17927, 17419, 17959)
+# annotation <- c('match', 'match', 'match')
+
+# Example data
+df <- tribble(
+  ~library,     ~condition, ~status,     ~number_of_genes,
+  "cellecta",  "Before",   "match",     17042,
+  "cellecta",  "Before",   "mismatch",    1376,
+  "cellecta",  "After",    "match",    17959,
+  "brunello",  "Before",   "match",     16967,
+  "brunello",  "Before",   "mismatch",    1056,
+  "brunello",  "After",    "match",    17927,
+  "toronto_v3",  "Before",   "match",     16313,
+  "toronto_v3",  "Before",   "mismatch",    1125,
+  "toronto_v3",  "After",    "match",    17419
+)
+
+# Ensure 'condition' is ordered so Before always comes first
+df <- df %>%
+  mutate(
+    condition = factor(condition, levels = c("Before", "After")),
+    status = factor(status, levels = c("mismatch", "match"))  # order matters here
+  )
+
+library <- c("brunello", "toronto_v3", "cellecta")
+factor <- c(2,3,1)
+
+# Plot
+stacked_barplot_correction <- ggplot(df, aes(x = reorder(library, -number_of_genes), y = number_of_genes, fill = status)) +
+geom_col() +
+  facet_grid(~ condition, 
+             scales = "free_x",
+             space = "free_x",
+             switch = "x",
+             labeller = as_labeller(c("Before" = "Before gene symbol update", "After" = "After gene symbol update"))) +
+  scale_fill_manual(values = c('match' = 'lightgreen', 'mismatch' = 'mistyrose'),
+                      name = 'Gene symbol in sgRNA ID',
+                      labels = c('match' = 'Approved symbol', 
+                                 'mismatch' = 'Previous/alias symbol')) +
+  labs(
+    title = "",
+    x = "",
+    y = "Number of Genes",
+    fill = "Gene Status"
+  ) +
+    scale_x_discrete(labels = c('brunello' = 'Brunello',
+                                'cellecta' = 'Cellecta',
+                                'toronto_v3' = 'TKoV3')) +
+  theme_bw(base_line_size = 15) +
+  theme(legend.position = 'right',
+        axis.text.x = element_text(size = 50, colour = 'black'),
+        axis.text.y = element_text(size = 50),
+        axis.title.y = element_text(size = 50, vjust=0.5, margin = margin(r = 20)),
+        legend.title = element_text(size = 50),
+        legend.text = element_text(size = 50),
+        line = element_line((size = 4), colour = 'black'),
+        strip.text = element_text(size = 50),
+        strip.placement = "outside",
+        strip.background = element_blank(),
+        strip.text.x = element_text(vjust = 0.5),
+        plot.margin = margin(1, 1, 1, 1)) +
+  # Optional: Label bars as "Before"/"After"
+  
+  geom_text(
+    data = df,
+    (aes(label = number_of_genes)),
+    stat = "identity",
+    position = position_stack(vjust = 0.5),
+    size = 15,
+    color = "black"
+  ) +
+    scale_y_continuous(limits = c(0, 20000), breaks = seq(0, 20000, by = 5000))
+
+ggsave(
+    path = './',
+    width = 35,
+    height = 15,
+    dpi = 300,
+    plot = stacked_barplot_correction,
+    filename = paste('stacked_barplot_correction.png', sep = ''))
+
+
+```
