@@ -87,7 +87,7 @@ library(xlsx)
 ```{r User defined variable (User input), echo = FALSE}
 
 file_dir_location <- './public_crispr_library/'
-sgRNA_library_selected <- 'tkov3_guide_sequence'
+sgRNA_library_selected <- 'yusa_hcrispr_ko_grnas'
 
 ccds_filename <- 'CCDS_20250112.txt'
 
@@ -142,6 +142,7 @@ if (file_test('-f', paste('./object_intermediate/', aln_2_mismatch_filename, sep
                                            bsgenome = BSgenome.Hsapiens.UCSC.hg38,
                                            crisprNuclease = crisprNuclease,
                                            n_mismatches = 2,
+                                           force_spacer_length = TRUE,
                                            canonical = TRUE,
                                            bowtie_index = bowtie_index)
       
@@ -700,6 +701,8 @@ sgRNA_library_refined <- rbind(sgRNA_library_control, sgRNA_library_cleaned)
 
 ```{r Calculate total sgRNAs and genes lost, include = FALSE}
 
+# filter(str_detect(gene, terms_for_filtering))
+
 total_sgRNA_or_gene_lost <- data.frame('gene' = sgRNA_library$gene) %>%
   count(gene) %>%
   dplyr::rename('sgRNA number' = 'n') %>%
@@ -718,7 +721,7 @@ total_sgRNA_or_gene_lost <- data.frame('gene' = sgRNA_library$gene) %>%
   mutate(`symbol change` = case_when(gene %in% gene_track_annotation$old_gene ~
                                        gene_track_annotation$gene[match(gene, gene_track_annotation$old_gene)],
                                         TRUE ~ 'no')) %>%
-  mutate(`protein-coding gene` = case_when(gene %in% c('Neg_Control', 'INTRON_CTRL') ~ 'no',
+  mutate(`protein-coding gene` = case_when(str_detect(gene, terms_for_filtering) ~ 'no',
                                            gene %in% genes_not_pcg ~ 'no',
                                            TRUE ~ 'yes'))
 

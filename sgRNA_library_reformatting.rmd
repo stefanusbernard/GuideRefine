@@ -53,16 +53,18 @@ function_detect_gene_and_sequence_col <- function(library_table, hgnc_symbol) {
   average_char_length <- sapply(library_table, function(col) {
     mean(nchar(as.character(col)), na.rm = TRUE)
     })
-  sequence_column <- colnames(library_table)[which(average_char_length == 20)]
+  sequence_column <- colnames(library_table)[which(average_char_length %in% c(19, 20))]
 
-  # detect gene symbol column based on the sampling of 30 rows of dataset and crossmatching with gene symbol column
-  library_table_sample <- head(library_table, n = 30)
+  # detect gene symbol column based on the sampling of 200 rows of dataset and crossmatching with gene symbol column
+  set.seed(123)
+  library_table_sample <- library_table[sample(nrow(library_table), min(200, nrow(library_table))), ]
   matches <- sapply(library_table_sample, function(col) {
     any(col %in% hgnc_symbol)
   })
   gene_column <- colnames(library_table_sample)[which(matches == TRUE)]
 
   fetch_this_column <- c(gene_column, sequence_column)
+  print(fetch_this_column)
   return(fetch_this_column)
 }
 

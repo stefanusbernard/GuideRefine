@@ -1,0 +1,7 @@
+# Public CRISPR sgRNA library resources
+
+1. Brunello library
+2. Gecko V2 library
+3. Avana library - https://www.nature.com/articles/nbt.3437#Sec8
+4. Toronto KO V3 library - 
+5. Yusa Project Score library - https://www.nature.com/articles/s41586-019-1103-9#Sec45
