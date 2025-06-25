@@ -78,7 +78,8 @@ function_reformat_sgrna_library <- function(imported_library_table, detected_sgR
   library_table <- imported_library_table %>%
     select(all_of(detected_sgRNA_gene_column)) %>%
     dplyr::rename(gene = !!sym(detected_sgRNA_gene_column[1]),
-                  sequence = !!sym(detected_sgRNA_gene_column[2]))
+                  sequence = !!sym(detected_sgRNA_gene_column[2])) %>%
+    arrange(gene)
 
   run_length <- rle(library_table$gene)$lengths
   sequential_number <- sequence(run_length)
@@ -86,7 +87,8 @@ function_reformat_sgrna_library <- function(imported_library_table, detected_sgR
   processed_library_table <- library_table %>%
     mutate(sgRNA = paste('sg', gene, '_', sequential_number, sep = '')) %>%
     dplyr::relocate(sgRNA, .before = gene) %>%
-    dplyr::relocate(gene, .after = sequence)
+    dplyr::relocate(gene, .after = sequence) %>%
+    arrange(gene)
 
   return(processed_library_table)
 }

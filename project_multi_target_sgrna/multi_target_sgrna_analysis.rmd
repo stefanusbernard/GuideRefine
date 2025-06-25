@@ -1,5 +1,5 @@
 ---
-title: "Compare sgRNA Library performance"
+title: "Analysis of multi-target sgRNAs"
 author: "Author: Stefanus Bernard"
 date: "Date: `r format(Sys.time(), '%d %B %Y')`"
 output: 
@@ -11,217 +11,56 @@ output:
 ---
 
 ```{r setup, include=FALSE}
-
 library(tidyverse)
 library(VennDiagram)
 library(ggvenn)
 
-source('sgRNA_library_refining_functions.R')
-
+source('../sgRNA_library_refinement_pipeline_functions.R')
 ```
 
-# Import sgRNA library data
+# List of functions
 
 ```{r}
-# import sample sgRNA library
-
+# import sgRNA library
 import_sgrna_library <- function(data_dir) {
   library <- read_tsv(data_dir, col_names = FALSE)
   colnames(library) <- c('sgRNA', 'spacer', 'gene')
   return(library)
 }
 
-brunello <- import_sgrna_library('./public_crispr_library/broadgpp-brunello-library-contents.tsv')
-toronto <- import_sgrna_library('./public_crispr_library/tkov3_guide_sequence.tsv')
-cellecta_M1 <- import_sgrna_library('./cellecta_library/sample_M1_150K.tsv')
-cellecta_M2 <- import_sgrna_library('./cellecta_library/sample_M2_150K.tsv')
-cellecta_M3 <- import_sgrna_library('./cellecta_library/sample_M3_150K.tsv')
-
-# combined cellecta and remove duplicates
-cellecta <- rbind(cellecta_M1, cellecta_M2, cellecta_M3)
-cellecta <- cellecta %>%
-  arrange(sgRNA) %>%
-  distinct()
-
-```
-
-# A venn diagram function to compare the similarity between three libraries
-
-```{r}
-
-venn_diagram <- function(set1, set2, name_set1, name_set2, color1, color2, name_venn) {
-  only_set1 <- length(setdiff(set1, set2))
-  only_set2 <- length(setdiff(set2, set1))
-  both_sets  <- length(intersect(set1, set2))
-
-  totalset1 <- only_set1 + both_sets
-  totalset2 <- only_set2 + both_sets
-
-  pct_set1 <- round((only_set1 / totalset1) * 100, 2)
-  pct_set2 <- round((only_set2 / totalset2) * 100, 2)
-  pct_overlap_set1 <- round((both_sets / totalset1) * 100, 2)
-  pct_overlap_set2 <- round((both_sets / totalset2) * 100, 2)
-
-  sgRNA_similarity <- venn.diagram(
-        x = list(set1, set2),
-        category.names = c(name_set1, name_set2),
-        filename = NULL,  
-        fill = c(color1, color2),
-        alpha = 0.5,
-        cex = 0,  # Set text size to 0 to hide numbers
-        cat.cex = 0.75,  # Set category label size
-        cat.pos = c(-2, 2),  # Adjust category label positions
-        cat.dist = c(0.05, 0.05),  # Adjust category label distances
-        lwd = 2
-  )
-
-  png(filename = name_venn, width = 1250, height = 1250, res = 300)
-  grid.newpage()
-  grid.draw(sgRNA_similarity)
-
-  grid.text(label = paste0(only_set2, '\n', pct_set1, '%'), x = 0.25, y = 0.50, gp = gpar(fontsize = 10))
-  grid.text(label = paste0(only_set1, '\n', pct_set2, '%'), x = 0.75, y = 0.50, gp = gpar(fontsize = 10))
-  grid.text(label = paste0(pct_overlap_set1, '%', '\nor\n', pct_overlap_set2, '%'), x = 2.5, y = 0.50, gp = gpar(fontsize = 7))
-
-  dev.off()
+# import alignment data and keep alignment for normal chromosome only
+import_sgrna_library_alignment <- function(data_dir) {
+  library <- read_csv(data_dir)
+  aln_normal_chr <- alignment_normal_chr(library)
+  return(aln_normal_chr)
 }
 
+# get list off target guides
+list_off_target_guides <- function(alignment_data) {
+  multi_target_library <- multi_target_sgrna(alignment_data)
+  single_mismatch_library <- single_mismatch_sgrna(alignment_data)
+  pam_double_mismatch_library <- pam_distal_double_mismatch(alignment_data)
+  
+  list_off_target_guides <- unique(union(multi_target_library$list_guides, unique(union(single_mismatch_library$list_guides, pam_double_mismatch_library$list_guides))))
+  
+  return(list(
+    multi_target_guides = unique(multi_target_library$list_guides),
+    single_mismatch_guides = unique(single_mismatch_library$list_guides), 
+    pam_double_mismatch_guides = unique(pam_double_mismatch_library$list_guides),
+    all_off_target_guides = list_off_target_guides))
+}
 
-```
-
-# compare the similarity of all sequences between three libraries
-
-```{r}
-venn_diagram(brunello$spacer, toronto$spacer, "Brunello \n 77K sgRNAs", "Toronto V3 \n 71K sgRNAs", 'powderblue', 'mistyrose', 'VennDiagram_sgRNAs_brunello_toronto.png')
-venn_diagram(brunello$spacer, cellecta$spacer, "Brunello \n 77K sgRNAs", "Cellecta \n 150K sgRNAs", 'powderblue', 'lightgreen', 'VennDiagram_sgRNAs_brunello_cellecta.png') 
-venn_diagram(toronto$spacer, cellecta$spacer, "Toronto V3 \n 77K sgRNAs", "Cellecta \n 150K sgRNAs", 'mistyrose', 'lightgreen', 'VennDiagram_sgRNAs_toronto_cellecta.png') 
-```
-
-# import alignment data from all libraries
-
-```{r}
-
-brunello_alignment <- read_csv('./object_intermediate/broadgpp-brunello-library-contents_aln.csv')
-toronto_alignment <- read_csv('./object_intermediate/tkov3_guide_sequence_aln.csv')
-cellecta_M1_alignment <- read_csv('./object_intermediate/sample_M1_150K_aln.csv')
-cellecta_M2_alignment <- read_csv('./object_intermediate/sample_M2_150K_aln.csv')
-cellecta_M3_alignment <- read_csv('./object_intermediate/sample_M3_150K_aln.csv')
-
-# combine all cellecta alignment
-cellecta_alignment <- rbind(cellecta_M1_alignment, cellecta_M2_alignment, cellecta_M3_alignment)
-cellecta_alignment <- cellecta_alignment %>%
-  arrange(sgRNA) %>%
-  distinct()
-
-# keep alignment only for normal chromosome
-brunello_alignment <- alignment_normal_chr(brunello_alignment)
-toronto_alignment <- alignment_normal_chr(toronto_alignment)
-cellecta_alignment <- alignment_normal_chr(cellecta_alignment)
-
-```
-
-# detect multi-target sgRNAs
-
-```{r}
-
-brunello_multi_target <- multi_target_sgrna(brunello_alignment)
-brunello_single_mismatch <- single_mismatch_sgrna(brunello_alignment)
-brunello_pam_mismatch <- pam_distal_double_mismatch(brunello_alignment)
-
-brunello_off_target <- unique(union(brunello_pam_mismatch$list_guides, unique(union(brunello_multi_target$list_guides, brunello_single_mismatch$list_guides))))
-
-toronto_multi_target <- multi_target_sgrna(toronto_alignment)
-toronto_single_mismatch <- single_mismatch_sgrna(toronto_alignment)
-toronto_pam_mismatch <- pam_distal_double_mismatch(toronto_alignment)
-
-toronto_off_target <- unique(union(toronto_pam_mismatch$list_guides, unique(union(toronto_multi_target$list_guides, toronto_single_mismatch$list_guides))))
-
-cellecta_multi_target <- multi_target_sgrna(cellecta_alignment)
-cellecta_single_mismatch <- single_mismatch_sgrna(cellecta_alignment)
-cellecta_pam_mismatch <- pam_distal_double_mismatch(cellecta_alignment)
-
-cellecta_off_target <- unique(union(cellecta_pam_mismatch$list_guides, unique(union(cellecta_multi_target$list_guides, cellecta_single_mismatch$list_guides))))
-
-brunello_off_target_spacer <- brunello %>%
-  filter(sgRNA %in% brunello_off_target)
-
-toronto_off_target_spacer <- toronto %>%
-  filter(sgRNA %in% toronto_off_target)
-
-cellecta_off_target_spacer <- cellecta %>%
-  filter(sgRNA %in% cellecta_off_target)
-
-off_target_venn <- venn.diagram(
-    x = list(
-        cellecta_off_target_spacer$spacer,
-        brunello_off_target_spacer$spacer
-    ),
-    category.names = c("Cellecta \n 150K sgRNAs", "Brunello \n 77K sgRNAs"),
-    filename = NULL,
-    output = TRUE,
-    fill = c("lightgreen", "powderblue"),
-    alpha = 0.5,
-    cex = 2.5,
-    cat.cex = 2,
-    cat.pos = c(-20, 20),
-    cat.dist = c(0.1, 0.1)
-)
-
-ggsave(
-    path = './',
-    width = 10,
-    height = 10,
-    dpi = 300,
-    plot = off_target_venn,
-    filename = paste('VennDiagram_off_target_cellecta_brunello.png', sep = ''))
-
-```
-
-# Analysis of multi-target sgRNAs
-
-```{r}
-
-# identification of sgRNAs
-
-brunello_multi_target <- multi_target_sgrna(brunello_alignment)
-toronto_multi_target <- multi_target_sgrna(toronto_alignment)
-cellecta_multi_target <- multi_target_sgrna(cellecta_alignment)
-
-brunello_single_mismatch <- single_mismatch_sgrna(brunello_alignment)
-toronto_single_mismatch <- single_mismatch_sgrna(brunello_alignment)
-cellecta_single_mismatch <- single_mismatch_sgrna(brunello_alignment)
-
-brunello_single_mismatch_list_guides <- setdiff(brunello_single_mismatch$list_guides, brunello_multi_target$list_guides)
-toronto_single_mismatch_list_guides <- setdiff(toronto_single_mismatch$list_guides, toronto_multi_target$list_guides)
-cellecta_single_mismatch_list_guides <- setdiff(cellecta_single_mismatch$list_guides, cellecta_multi_target$list_guides)
-
-# alignment data
-
-brunello_alignment_multi_target <- brunello_alignment %>% filter(sgRNA %in% brunello_multi_target$list_guides)
-toronto_alignment_multi_target <- toronto_alignment %>% filter(sgRNA %in% toronto_multi_target$list_guides)
-cellecta_alignment_multi_target <- cellecta_alignment %>% filter(sgRNA %in% cellecta_multi_target$list_guides)
-
-brunello_alignment_single_mismatch <- brunello_alignment %>% filter(sgRNA %in% brunello_single_mismatch_list_guides)
-toronto_alignment_single_mismatch <- toronto_alignment %>% filter(sgRNA %in% toronto_single_mismatch_list_guides)
-cellecta_alignment_single_mismatch <- cellecta_alignment %>% filter(sgRNA %in% cellecta_single_mismatch_list_guides)
-
-```
-
-# Calculate the number of multi-target sgRNAs targeting other genomic locations and protein-coding genes
-
-```{r}
-
+# annotate off-target sgRNAs
 annotate_off_target <- function(alignment_data) {
-  ccds <- read_ccds_data('CCDS_20250112.txt')
+  ccds <- read_ccds_data('../CCDS_20250112.txt')
   transformed_ccds <- transform_gene_annotation_ccds(ccds)
   modified_alignment <- add_cut_pos_pam_pos(alignment_data)
   off_target_granges <- make_granges_from_alignment_data(modified_alignment)
   gene_df_overlap <- find_overlaps_gene_annotation_and_alignment(off_target_granges, transformed_ccds$gene_annot_granges_df)
-
   return(gene_df_overlap)
-    
 }
 
+# off target analysis (can be multi-target, single-mismatch, or pam-distal double mismatches)
 off_target_analysis <- function(alignment_data, num_mismatch, library, library_name){
   gene_df <- annotate_off_target(alignment_data)
   gene_df <- gene_df %>%
@@ -261,44 +100,120 @@ off_target_analysis <- function(alignment_data, num_mismatch, library, library_n
     aln_data_df = alignment_data_gene_df,
     summary_df = summary_target_df, 
     freq_table = calculate_freq_table))
-
 }
 
-brunello_multi_target_analysis <- off_target_analysis(brunello_alignment_multi_target, 0, brunello, 'brunello')
-toronto_multi_target_analysis <- off_target_analysis(toronto_alignment_multi_target, 0, toronto, 'toronto')
-cellecta_multi_target_analysis <- off_target_analysis(cellecta_alignment_multi_target, 0, cellecta, 'cellecta')
-
-brunello_single_mismatch_analysis <- off_target_analysis(brunello_alignment_single_mismatch, 1, brunello, 'brunello')
-toronto_single_mismatch_analysis <- off_target_analysis(toronto_alignment_single_mismatch, 1, toronto, 'toronto')
-cellecta_single_mismatch_analysis <- off_target_analysis(cellecta_alignment_single_mismatch, 1, cellecta, 'cellecta')
 
 ```
 
-# Frequency table and visualization
+# import alignment data from all libraries
+
+```{r}
+brunello_alignment <- import_sgrna_library_alignment('../object_intermediate/broadgpp-brunello-library-contents_aln.csv')
+toronto_alignment <- import_sgrna_library_alignment('../object_intermediate/tkov3_guide_sequence_aln.csv')
+yusa_alignment <- import_sgrna_library_alignment('../object_intermediate/yusa_hcrispr_ko_grnas_aln.csv')
+avana_alignment <- import_sgrna_library_alignment('../object_intermediate/avana_library_aln.csv')
+
+# cellecta_M1_alignment <- import_sgrna_library_alignment('./object_intermediate/sample_M1_150K_aln.csv')
+# cellecta_M2_alignment <- import_sgrna_library_alignment('./object_intermediate/sample_M2_150K_aln.csv')
+# cellecta_M3_alignment <- import_sgrna_library_alignment('./object_intermediate/sample_M3_150K_aln.csv')
+# 
+# cellecta_alignment <- rbind(cellecta_M1_alignment, cellecta_M2_alignment, cellecta_M3_alignment)
+```
+
+# detect all type of off-target sgRNAs from all libraries
+
+```{r}
+brunello_off_target <- list_off_target_guides(brunello_alignment)
+toronto_off_target <- list_off_target_guides(toronto_alignment)
+yusa_off_target <- list_off_target_guides(yusa_alignment)
+avana_off_target <- list_off_target_guides(avana_alignment)
+
+```
+
+# Analysis of multi-target sgRNAs
+
+```{r}
+# alignment data
+
+brunello_alignment_multi_target <- brunello_alignment %>% filter(sgRNA %in% brunello_off_target$multi_target_guides)
+toronto_alignment_multi_target <- toronto_alignment %>% filter(sgRNA %in% toronto_off_target$multi_target_guides)
+yusa_alignment_multi_target <- yusa_alignment %>% filter(sgRNA %in% yusa_off_target$multi_target_guides)
+avana_alignment_multi_target <- avana_alignment %>% filter(sgRNA %in% avana_off_target$multi_target_guides)
+
+brunello_alignment_single_mismatch <- brunello_alignment %>% filter(sgRNA %in% brunello_off_target$single_mismatch_guides)
+toronto_alignment_single_mismatch <- toronto_alignment %>% filter(sgRNA %in% toronto_off_target$single_mismatch_guides)
+yusa_alignment_single_mismatch <- yusa_alignment %>% filter(sgRNA %in% yusa_off_target$single_mismatch_guides)
+avana_alignment_single_mismatch <- avana_alignment %>% filter(sgRNA %in% avana_off_target$single_mismatch_guides)
+
+# for cellecta
+# cellecta_multi_target <- multi_target_sgrna(cellecta_alignment)
+# cellecta_single_mismatch <- single_mismatch_sgrna(brunello_alignment)
+# cellecta_single_mismatch_list_guides <- setdiff(cellecta_single_mismatch$list_guides, cellecta_multi_target$list_guides)
+# cellecta_alignment_multi_target <- cellecta_alignment %>% filter(sgRNA %in% cellecta_off$list_guides)
+# cellecta_alignment_single_mismatch <- cellecta_alignment %>% filter(sgRNA %in% cellecta_single_mismatch_list_guides)
+
+```
+
+# import sgRNA library
+
+```{r}
+brunello <- import_sgrna_library('../public_crispr_library/broadgpp-brunello-library-contents.tsv')
+toronto <- import_sgrna_library('../public_crispr_library/tkov3_guide_sequence.tsv')
+yusa <- import_sgrna_library('../public_crispr_library/yusa_hcrispr_ko_grnas.tsv')
+avana <- import_sgrna_library('../public_crispr_library/avana_library.tsv')
+```
+
+
+# Calculate the number of multi-target sgRNAs targeting other genomic locations and protein-coding genes
+
+```{r}
+
+brunello_multi_target_analysis <- off_target_analysis(brunello_alignment_multi_target, 0, brunello, 'brunello')
+toronto_multi_target_analysis <- off_target_analysis(toronto_alignment_multi_target, 0, toronto, 'toronto')
+yusa_multi_target_analysis <- off_target_analysis(yusa_alignment_multi_target, 0, yusa, 'yusa')
+avana_multi_target_analysis <- off_target_analysis(avana_alignment_multi_target, 0, avana, 'avana')
+
+brunello_single_mismatch_analysis <- off_target_analysis(brunello_alignment_single_mismatch, 1, brunello, 'brunello')
+toronto_single_mismatch_analysis <- off_target_analysis(toronto_alignment_single_mismatch, 1, toronto, 'toronto')
+yusa_single_mismatch_analysis <- off_target_analysis(yusa_alignment_single_mismatch, 1, yusa, 'yusa')
+avana_single_mismatch_analysis <- off_target_analysis(avana_alignment_single_mismatch, 1, avana, 'avana')
+
+# for cellecta
+# cellecta_multi_target_analysis <- off_target_analysis(cellecta_alignment_multi_target, 0, cellecta, 'cellecta')
+# cellecta_single_mismatch_analysis <- off_target_analysis(cellecta_alignment_single_mismatch, 1, cellecta, 'cellecta')
+```
+
+### What is percentage of sgRNAS that target multiple genomic sites perfectly?
+### What is percentage of sgRNAS that target multiple protein-coding genes perfectly?
+### What is percentage of sgRNAS that target multiple genomic sites with mismatches?
+### What is percentage of sgRNAS that target multiple protein-coding genes with mismatches?
 
 ```{r}
 
 table_multi_target <- rbind(brunello_multi_target_analysis$freq_table,
                             toronto_multi_target_analysis$freq_table,
-                            cellecta_multi_target_analysis$freq_table)
+                            yusa_multi_target_analysis$freq_table,
+                            avana_multi_target_analysis$freq_table)
 table_multi_target <- table_multi_target %>%
   arrange(target)
 
 table_single_mismatch <- rbind(brunello_single_mismatch_analysis$freq_table,
                               toronto_single_mismatch_analysis$freq_table,
-                              cellecta_single_mismatch_analysis$freq_table)
+                              yusa_single_mismatch_analysis$freq_table,
+                              avana_single_mismatch_analysis$freq_table)
 table_single_mismatch <- table_single_mismatch %>%
   arrange(target)
 
 
 # Grouped bar chart
-grouped_barplot <- ggplot(table_multi_target, aes(x = factor(library, levels = c('cellecta', 'brunello', 'toronto')), y = percent, fill = target)) +
+grouped_barplot <- ggplot(table_single_mismatch, aes(x = factor(library, levels = c('brunello', 'toronto', 'yusa', 'avana')), y = percent, fill = target)) +
   geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
   theme_minimal() +
   labs(title = "", x = "sgRNA libraries", y = "Percentage of sgRNAs (%)") +
   scale_x_discrete(labels = c('brunello' = 'Brunello \n 77K sgRNAs',
-                'cellecta' = 'Cellecta \n 150K sgRNAs',
-                'toronto' = 'Toronto \nKnockout V3 \n 71K sgRNAs')) +
+                'yusa' = 'Yusa \n 70K sgRNAs',
+                'toronto' = 'Toronto \nKnockout V3 \n 71K sgRNAs',
+                'avana' = 'Avana 70K sgRNAs')) +
   scale_fill_manual(values = c("random genomic loci" = "#B3589A",
                               "protein-coding genes" = "#E7F7D5",
                               "random genomic loci or protein-coding genes" = "#ff9028")) +
@@ -318,11 +233,12 @@ ggsave(
     height = 15,
     dpi = 300,
     plot = grouped_barplot,
-    filename = paste('grouped_barplot_multi_target_2.png', sep = ''))
+    filename = paste('grouped_barplot_single_mismatch.png', sep = ''))
 
 ```
 
-# Paralog pair analysis
+### Are genes with paralogs more likely to be subject to multi-targeting effects?
+### Are multitargeting effects more likely to target pairs of paralogs?
 
 ```{r}
 

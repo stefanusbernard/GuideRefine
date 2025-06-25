@@ -43,7 +43,7 @@ The current HGNC dataset were retrieved from https://storage.googleapis.com/publ
 ```{r install required packages, include = FALSE}
 
 setwd(getwd())
-source('sgRNA_library_refining_functions.R')
+source('sgRNA_library_refinement_pipeline_functions.R')
 
 list_packages_bioconductor <- c('crisprBase',
                                 'crisprBowtie',
@@ -87,7 +87,7 @@ library(xlsx)
 ```{r User defined variable (User input), echo = FALSE}
 
 file_dir_location <- './public_crispr_library/'
-sgRNA_library_selected <- 'yusa_hcrispr_ko_grnas'
+sgRNA_library_selected <- 'avana_library'
 
 ccds_filename <- 'CCDS_20250112.txt'
 
