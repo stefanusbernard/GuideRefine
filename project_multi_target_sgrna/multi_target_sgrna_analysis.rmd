@@ -1,5 +1,5 @@
 ---
-title: "Analysis of multi-target sgRNAs"
+title: "annotation of multi-target sgRNAs"
 author: "Author: Stefanus Bernard"
 date: "Date: `r format(Sys.time(), '%d %B %Y')`"
 output: 
@@ -37,9 +37,22 @@ import_sgrna_library_alignment <- function(data_dir) {
 
 # get list off target guides
 list_off_target_guides <- function(alignment_data) {
+  # start with multi-target sgRNA
   multi_target_library <- multi_target_sgrna(alignment_data)
-  single_mismatch_library <- single_mismatch_sgrna(alignment_data)
-  pam_double_mismatch_library <- pam_distal_double_mismatch(alignment_data)
+  
+  # removal of multi-target sgRNA from the library
+  alignment_data_2 <- alignment_data %>%
+    filter(!sgRNA %in% multi_target_library$list_guides)
+  
+  # continue with single mismatch sgRNA
+  single_mismatch_library <- single_mismatch_sgrna(alignment_data_2)
+  
+  # removal of single mismatch sgRNA from the library
+  alignment_data_3 <- alignment_data_2 %>%
+    filter(!sgRNA %in% single_mismatch_library$list_guides)
+  
+  # continue with pam double mismatch sgRNA
+  pam_double_mismatch_library <- pam_distal_double_mismatch(alignment_data_3)
   
   list_off_target_guides <- unique(union(multi_target_library$list_guides, unique(union(single_mismatch_library$list_guides, pam_double_mismatch_library$list_guides))))
   
@@ -60,8 +73,9 @@ annotate_off_target <- function(alignment_data) {
   return(gene_df_overlap)
 }
 
-# off target analysis (can be multi-target, single-mismatch, or pam-distal double mismatches)
-off_target_analysis <- function(alignment_data, num_mismatch, library, library_name){
+# off target annotation (can be multi-target, single-mismatch, or pam-distal double mismatches) used to annotate whether the sgRNA target random genomic loci, protein-coding genes or intended target gene
+
+off_target_annotation <- function(alignment_data, num_mismatch, library, library_name){
   gene_df <- annotate_off_target(alignment_data)
   gene_df <- gene_df %>%
     dplyr::rename('actual_chr' = 'chr',
@@ -69,19 +83,23 @@ off_target_analysis <- function(alignment_data, num_mismatch, library, library_n
 
   alignment_data <- add_cut_pos_pam_pos(alignment_data)
   alignment_data <- alignment_data %>%
-    select(unique_aln_id, sgRNA, spacer, protospacer, gene, chr, n_mismatches, cut_pos) %>% 
+    select(unique_aln_id, sgRNA, spacer, protospacer, gene, chr, n_mismatches, cut_pos) %>%
     dplyr::rename('sgrna' = 'sgRNA')
-
-  alignment_data_gene_df <- alignment_data %>%
+  
+  # one version of alignment data for paralog analysis (you will need the actual gene to detect which multi-target sgRNA targeting only two protein-coding genes - one is the actual gene, the other one is the paralog pairs)
+  alignment_data_gene_df_1 <- alignment_data %>%
     left_join(gene_df, by = join_by(unique_aln_id, sgrna, spacer, protospacer, cut_pos)) %>%
     select(unique_aln_id, sgrna, spacer, protospacer, gene, chr, n_mismatches, cut_pos, actual_chr, actual_gene) %>%
     filter(n_mismatches == num_mismatch) %>%
     mutate(target = case_when(gene == actual_gene ~ 'actual gene',
-                            gene != actual_gene ~ 'protein-coding genes',
-                            is.na(actual_gene) ~ 'random genomic loci')) %>%
+                              gene != actual_gene ~ 'protein-coding genes',
+                              is.na(actual_gene) ~ 'random genomic loci'))
+  
+  # 2nd version of alignment data for frequency table and histogram plot
+  alignment_data_gene_df_2 <- alignment_data_gene_df_1 %>%
     filter(target != 'actual gene')
-
-  summary_target_df <- alignment_data_gene_df %>%
+  
+  summary_target_df <- alignment_data_gene_df_2 %>%
     select(sgrna, target) %>%
     group_by(sgrna) %>%
     mutate(target = ifelse(n() > 1, 'random genomic loci or protein-coding genes', target)) %>%
@@ -97,7 +115,8 @@ off_target_analysis <- function(alignment_data, num_mismatch, library, library_n
            library = library_name)
 
   return(list(
-    aln_data_df = alignment_data_gene_df,
+    aln_data_df_1 = alignment_data_gene_df_1,
+    aln_data_df_2 = alignment_data_gene_df_2,
     summary_df = summary_target_df, 
     freq_table = calculate_freq_table))
 }
@@ -105,10 +124,15 @@ off_target_analysis <- function(alignment_data, num_mismatch, library, library_n
 
 ```
 
-# import alignment data from all libraries
+# import alignment data from all libraries and import sgRNA libraries
 
 ```{r}
 hgnc <- read_tsv(url('https://storage.googleapis.com/public-download-files/hgnc/tsv/tsv/hgnc_complete_set.txt'))
+
+brunello <- import_sgrna_library('../public_crispr_library/broadgpp-brunello-library-contents.tsv')
+toronto <- import_sgrna_library('../public_crispr_library/tkov3_guide_sequence.tsv')
+yusa <- import_sgrna_library('../public_crispr_library/yusa_hcrispr_ko_grnas.tsv')
+avana <- import_sgrna_library('../public_crispr_library/avana_library.tsv')
 
 brunello_alignment <- import_sgrna_library_alignment('../object_intermediate/broadgpp-brunello-library-contents_aln.csv')
 toronto_alignment <- import_sgrna_library_alignment('../object_intermediate/tkov3_guide_sequence_aln.csv')
@@ -125,6 +149,7 @@ avana_alignment <- import_sgrna_library_alignment('../object_intermediate/avana_
 # detect all type of off-target sgRNAs from all libraries
 
 ```{r}
+
 brunello_off_target <- list_off_target_guides(brunello_alignment)
 toronto_off_target <- list_off_target_guides(toronto_alignment)
 yusa_off_target <- list_off_target_guides(yusa_alignment)
@@ -132,7 +157,7 @@ avana_off_target <- list_off_target_guides(avana_alignment)
 
 ```
 
-# Analysis of multi-target sgRNAs
+# annotation of multi-target sgRNAs
 
 ```{r}
 # alignment data
@@ -142,10 +167,10 @@ toronto_alignment_multi_target <- toronto_alignment %>% filter(sgRNA %in% toront
 yusa_alignment_multi_target <- yusa_alignment %>% filter(sgRNA %in% yusa_off_target$multi_target_guides)
 avana_alignment_multi_target <- avana_alignment %>% filter(sgRNA %in% avana_off_target$multi_target_guides)
 
-brunello_alignment_single_mismatch <- brunello_alignment %>% filter(sgRNA %in% brunello_off_target$single_mismatch_guides)
-toronto_alignment_single_mismatch <- toronto_alignment %>% filter(sgRNA %in% toronto_off_target$single_mismatch_guides)
-yusa_alignment_single_mismatch <- yusa_alignment %>% filter(sgRNA %in% yusa_off_target$single_mismatch_guides)
-avana_alignment_single_mismatch <- avana_alignment %>% filter(sgRNA %in% avana_off_target$single_mismatch_guides)
+# brunello_alignment_single_mismatch <- brunello_alignment %>% filter(sgRNA %in% brunello_off_target$single_mismatch_guides)
+# toronto_alignment_single_mismatch <- toronto_alignment %>% filter(sgRNA %in% toronto_off_target$single_mismatch_guides)
+# yusa_alignment_single_mismatch <- yusa_alignment %>% filter(sgRNA %in% yusa_off_target$single_mismatch_guides)
+# avana_alignment_single_mismatch <- avana_alignment %>% filter(sgRNA %in% avana_off_target$single_mismatch_guides)
 
 # for cellecta
 # cellecta_multi_target <- multi_target_sgrna(cellecta_alignment)
@@ -156,33 +181,23 @@ avana_alignment_single_mismatch <- avana_alignment %>% filter(sgRNA %in% avana_o
 
 ```
 
-# import sgRNA library
-
-```{r}
-brunello <- import_sgrna_library('../public_crispr_library/broadgpp-brunello-library-contents.tsv')
-toronto <- import_sgrna_library('../public_crispr_library/tkov3_guide_sequence.tsv')
-yusa <- import_sgrna_library('../public_crispr_library/yusa_hcrispr_ko_grnas.tsv')
-avana <- import_sgrna_library('../public_crispr_library/avana_library.tsv')
-```
-
-
 # Calculate the number of multi-target sgRNAs targeting other genomic locations and protein-coding genes
 
 ```{r}
 
-brunello_multi_target_analysis <- off_target_analysis(brunello_alignment_multi_target, 0, brunello, 'brunello')
-toronto_multi_target_analysis <- off_target_analysis(toronto_alignment_multi_target, 0, toronto, 'toronto')
-yusa_multi_target_analysis <- off_target_analysis(yusa_alignment_multi_target, 0, yusa, 'yusa')
-avana_multi_target_analysis <- off_target_analysis(avana_alignment_multi_target, 0, avana, 'avana')
+brunello_multi_target_annotation <- off_target_annotation(brunello_alignment_multi_target, 0, brunello, 'brunello')
+toronto_multi_target_annotation <- off_target_annotation(toronto_alignment_multi_target, 0, toronto, 'toronto')
+yusa_multi_target_annotation <- off_target_annotation(yusa_alignment_multi_target, 0, yusa, 'yusa')
+avana_multi_target_annotation <- off_target_annotation(avana_alignment_multi_target, 0, avana, 'avana')
 
-brunello_single_mismatch_analysis <- off_target_analysis(brunello_alignment_single_mismatch, 1, brunello, 'brunello')
-toronto_single_mismatch_analysis <- off_target_analysis(toronto_alignment_single_mismatch, 1, toronto, 'toronto')
-yusa_single_mismatch_analysis <- off_target_analysis(yusa_alignment_single_mismatch, 1, yusa, 'yusa')
-avana_single_mismatch_analysis <- off_target_analysis(avana_alignment_single_mismatch, 1, avana, 'avana')
+# brunello_single_mismatch_annotation <- off_target_annotation(brunello_alignment_single_mismatch, 1, brunello, 'brunello')
+# toronto_single_mismatch_annotation <- off_target_annotation(toronto_alignment_single_mismatch, 1, toronto, 'toronto')
+# yusa_single_mismatch_annotation <- off_target_annotation(yusa_alignment_single_mismatch, 1, yusa, 'yusa')
+# avana_single_mismatch_annotation <- off_target_annotation(avana_alignment_single_mismatch, 1, avana, 'avana')
 
 # for cellecta
-# cellecta_multi_target_analysis <- off_target_analysis(cellecta_alignment_multi_target, 0, cellecta, 'cellecta')
-# cellecta_single_mismatch_analysis <- off_target_analysis(cellecta_alignment_single_mismatch, 1, cellecta, 'cellecta')
+# cellecta_multi_target_annotation <- off_target_annotation(cellecta_alignment_multi_target, 0, cellecta, 'cellecta')
+# cellecta_single_mismatch_annotation <- off_target_annotation(cellecta_alignment_single_mismatch, 1, cellecta, 'cellecta')
 ```
 
 ### What is percentage of sgRNAS that target multiple genomic sites perfectly?
@@ -192,17 +207,17 @@ avana_single_mismatch_analysis <- off_target_analysis(avana_alignment_single_mis
 
 ```{r}
 
-table_multi_target <- rbind(brunello_multi_target_analysis$freq_table,
-                            toronto_multi_target_analysis$freq_table,
-                            yusa_multi_target_analysis$freq_table,
-                            avana_multi_target_analysis$freq_table)
+table_multi_target <- rbind(brunello_multi_target_annotation$freq_table,
+                            toronto_multi_target_annotation$freq_table,
+                            yusa_multi_target_annotation$freq_table,
+                            avana_multi_target_annotation$freq_table)
 table_multi_target <- table_multi_target %>%
   arrange(target)
 
-table_single_mismatch <- rbind(brunello_single_mismatch_analysis$freq_table,
-                              toronto_single_mismatch_analysis$freq_table,
-                              yusa_single_mismatch_analysis$freq_table,
-                              avana_single_mismatch_analysis$freq_table)
+table_single_mismatch <- rbind(brunello_single_mismatch_annotation$freq_table,
+                              toronto_single_mismatch_annotation$freq_table,
+                              yusa_single_mismatch_annotation$freq_table,
+                              avana_single_mismatch_annotation$freq_table)
 table_single_mismatch <- table_single_mismatch %>%
   arrange(target)
 
@@ -246,42 +261,83 @@ ggsave(
 
 ```{r}
 
-
-fischer_exact_test_for_off_target <- function(library_multi_target_analysis_aligned_data, original_alignment_data, off_target_alignment_data, paralog_dataset) {
+# list paralog gene pairs from barbara's dataset
+list_paralog_gene_pairs <- function(dataset) {
+  predicted_paralog_dataset <- read_csv(dataset)
+  gene_pair_1 <- predicted_paralog_dataset$sorted_gene_pair
+  gene_pair_2 <- predicted_paralog_dataset$sorted_gene_pair_2
   
-  predicted_paralog_dataset <- read_csv(paralog_dataset)
-  library_aln_data_df <- library_multi_target_analysis_aligned_data$aln_data_df
+  gene_pair <- unique(union(gene_pair_1, gene_pair_2))
+  return(gene_pair)
+}
 
-  off_target_paralog <- library_aln_data_df %>%
-    mutate(gene_pair = paste(gene, actual_gene, sep = '_')) %>%
-    filter(gene_pair %in% predicted_paralog_dataset$sorted_gene_pair | gene_pair %in% predicted_paralog_dataset$sorted_gene_pair_2)
+predicted_paralog_pairs <- list_paralog_gene_pairs('../barbara_paralog_dataset.csv')
+read_data <- read_csv('../barbara_paralog_dataset.csv')
 
-  off_target_not_paralog <- library_aln_data_df %>%
-    mutate(gene_pair = paste(gene, actual_gene, sep = '_')) %>%
-    filter(!gene_pair %in% predicted_paralog_dataset$sorted_gene_pair | !gene_pair %in% predicted_paralog_dataset$sorted_gene_pair_2) %>%
-    filter(!sgrna %in% off_target_paralog$sgrna)
+# pick multi-target alignment strictly with 2 protein-coding genes only
 
-  common_paralog <- original_alignment_data %>%
-    filter(!sgRNA %in% off_target_alignment_data$list_guides, 
-          (gene %in% predicted_paralog_dataset$A1) & (gene %in% predicted_paralog_dataset$A2))
+find_multi_target_paralog <- function(alignment_gene_df_1, paralog_dataset, how_many_target_paralog) {
+  
+  aln_multi_target_paralog <- alignment_gene_df_1 %>%
+    drop_na() %>%
+    mutate(target = case_when(paste(gene, actual_gene, sep ='_') %in% predicted_paralog_pairs ~ 'targeting paralog gene',
+                              gene == actual_gene ~ 'actual gene',
+                              TRUE ~ 'other protein-coding gene')) %>%
+    group_by(sgrna) %>%
+    filter(n() == how_many_target_paralog,
+           all(c("targeting paralog gene", "actual gene") %in% target),
+           n_distinct(target) == 2) %>% 
+    ungroup()
+  
+  list_not_paralog_guides <- setdiff(unique(alignment_gene_df_1$sgrna), unique(aln_multi_target_paralog$sgrna))
+  
+  return(list(aln_multi_target_paralog_df = aln_multi_target_paralog,
+              multi_target_paralog_guides = unique(aln_multi_target_paralog$sgrna),
+              multi_target_not_paralog_guides = unique(list_not_paralog_guides)))
+  
+}
 
-  common_not_paralog <- original_alignment_data %>%
-    filter(!sgRNA %in% off_target_alignment_data$list_guides, 
-          (!gene %in% predicted_paralog_dataset$A1) | (!gene %in% predicted_paralog_dataset$A2),
-          !sgRNA %in% common_paralog$sgRNA)
+brunello_multi_target_paralog <- find_multi_target_paralog(brunello_multi_target_annotation$aln_data_df_1, predicted_paralog_pairs, 2)
 
-  print(paste('Multi-target sgRNAs targeting paralog genes:', n_distinct(off_target_paralog$sgrna)))
-  print(paste('Multi-target sgRNAs not targeting paralog genes:', n_distinct(off_target_not_paralog$sgrna)))
-  print(paste('Non multi-target sgRNAs targeting paralog genes:', n_distinct(common_paralog$sgRNA)))
-  print(paste('Non multi-target sgRNAs not targeting paralog genes:', n_distinct(common_not_paralog$sgRNA)))
+find_not_multi_target_paralog <- function(sgrna_library, alignment_gene_df_1, paralog_dataset) {
+  
+  # read paralog dataset
+  paralog <- read_csv(paralog_dataset)
+  
+  # non multi-target sgRNA in the library
+  sgrna_library_not_multi_target <- sgrna_library %>%
+    filter(!sgRNA %in% alignment_gene_df_1$sgrna)
+  
+  # normal sgRNA targeting paralog
+  sgrna_library_paralog <- sgrna_library_not_multi_target %>%
+    filter(gene %in% paralog$A1)
+  
+  # normal sgRNA not targeting paralog
+  sgrna_library_not_paralog <- setdiff(unique(sgrna_library_not_multi_target$sgRNA), unique(sgrna_library_paralog$sgRNA))
+  
+  return (list(normal_sgrna_paralog = unique(sgrna_library_paralog$sgRNA),
+               normal_sgrna_not_paralog = sgrna_library_not_paralog))
+  
+}
+
+brunello_not_paralog <- find_not_multi_target_paralog(brunello, brunello_multi_target_annotation$aln_data_df_1, '../barbara_paralog_dataset.csv')
+
+
+
+fisher_multi_target_paralog <- function(off_target_paralog_guides, off_target_not_paralog_guides, normal_paralog_guides, normal_not_paralog_guides, sgrna_library) {
+
+  print(paste('Multi-target sgRNAs targeting paralog genes:', length(off_target_paralog_guides)))
+  print(paste('Multi-target sgRNAs not targeting paralog genes:', length(off_target_not_paralog_guides)))
+  print(paste('Non multi-target sgRNAs targeting paralog genes:', length(normal_paralog_guides)))
+  print(paste('Non multi-target sgRNAs not targeting paralog genes:', length(normal_not_paralog_guides)))
 
   # Create the contingency table
   contingency_table <- matrix(
     c(
-      length(unique(off_target_paralog$sgrna)),  # Multi-target sgRNAs targeting paralog genes
-      length(unique(off_target_not_paralog$sgrna)),  # Multi-target sgRNAs not targeting paralog genes
-      length(unique(common_paralog$sgRNA)),  # Non-multi-target sgRNAs targeting paralog genes
-      length(unique(common_not_paralog$sgRNA))  # Non-multi-target sgRNAs not targeting paralog genes
+      length(off_target_paralog_guides),  # Multi-target sgRNAs targeting paralog genes
+      length(off_target_not_paralog_guides),  # Multi-target sgRNAs not targeting paralog genes
+      length(normal_paralog_guides),  # Non-multi-target sgRNAs targeting paralog genes
+      length(normal_not_paralog_guides)  # Non-multi-target sgRNAs not targeting paralog genes
     ),
     nrow = 2
   )
@@ -290,7 +346,7 @@ fischer_exact_test_for_off_target <- function(library_multi_target_analysis_alig
 
   # Check if the total matches the unique sgRNAs in alignment_data
   total_contingency_table <- sum(contingency_table)
-  total_unique_sgrna <- length(unique(original_alignment_data$sgRNA))
+  total_unique_sgrna <- length(unique(sgrna_library$sgRNA))
 
   print(paste('total sgRNA count in contingency table:', total_contingency_table))
   print(paste('total original number of sgRNA:', total_unique_sgrna))
@@ -305,25 +361,22 @@ fischer_exact_test_for_off_target <- function(library_multi_target_analysis_alig
   fischer_library_multi_target <- fisher.test(contingency_table)
   print(fischer_library_multi_target)
 
-  return(list(off_target_paralog_df = off_target_paralog,
-              off_target_not_paralog_df = off_target_not_paralog,
-              common_paralog_df = common_paralog, 
-              common_not_paralog_df = common_not_paralog))
-
 }
 
+dataset_brunello_fischer <- fisher_multi_target_paralog(brunello_multi_target_paralog$multi_target_paralog_guides, 
+                                                        brunello_multi_target_paralog$multi_target_not_paralog_guides, 
+                                                        brunello_not_paralog$normal_sgrna_paralog, 
+                                                        brunello_not_paralog$normal_sgrna_not_paralog,
+                                                        brunello)
 
-dataset_brunello_fischer <- fischer_exact_test_for_off_target(brunello_multi_target_analysis, 
-                                                                brunello_alignment, 
-                                                                brunello_alignment_multi_target, 
-                                                                '../barbara_paralog_dataset.csv')
-
-dataset_toronto_fischer <- fischer_exact_test_for_off_target(toronto_multi_target_analysis, 
+dataset_toronto_fischer <- fischer_exact_test_for_off_target(toronto_multi_target_annotation, 
                                                                 toronto_alignment, 
                                                                 toronto_alignment_multi_target, 
                                                                 '../barbara_paralog_dataset.csv')
 
-# dataset_cellecta_fischer <- fischer_exact_test_for_off_target(cellecta_multi_target_analysis, 
+
+
+# dataset_cellecta_fischer <- fischer_exact_test_for_off_target(cellecta_multi_target_annotation, 
 #                                                               cellecta_alignment, 
 #                                                               cellecta_multi_target, 
 #                                                               'barbara_paralog_dataset.csv')
@@ -345,7 +398,7 @@ dataset_toronto_fischer <- fischer_exact_test_for_off_target(toronto_multi_targe
 ```
 
 
-# brunello_aln_data_df <- brunello_multi_target_analysis$aln_data_df
+# brunello_aln_data_df <- brunello_multi_target_annotation$aln_data_df
 # multi-target sgRNAs targeting genes with paralog pairs
 # 1041
 # multi-target sgRNAs targeting genes that are not paralog pairs
@@ -361,11 +414,11 @@ dataset_toronto_fischer <- fischer_exact_test_for_off_target(toronto_multi_targe
 #   mutate(sorted_gene_pair_2 = paste(A2, '_', A1, sep = '')) %>%
 #   relocate(sorted_gene_pair_2, .after = sorted_gene_pair)
 # 
-# brunello_off_target_paralog <- brunello_multi_target_analysis$aln_data_df %>%
+# brunello_off_target_paralog <- brunello_multi_target_annotation$aln_data_df %>%
 #   mutate(gene_pair = paste(gene, actual_gene, sep = '_')) %>%
 #   filter(gene_pair %in% predicted_paralog_dataset$sorted_gene_pair)
 # 
-# brunello_off_target_not_paralog <- brunello_multi_target_analysis$aln_data_df %>%
+# brunello_off_target_not_paralog <- brunello_multi_target_annotation$aln_data_df %>%
 #   mutate(gene_pair = paste(gene, actual_gene, sep = '_')) %>%
 #   filter(!gene_pair %in% predicted_paralog_dataset$sorted_gene_pair) %>%
 #   filter(!sgrna %in% brunello_off_target_paralog$sgrna)
