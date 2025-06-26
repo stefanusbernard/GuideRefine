@@ -1,5 +1,7 @@
 library(tidyverse)
 
+#### MAIN FUNCTIONS
+
 # function_df_count
 function_df_count <- function(df_count, count_sgrna, num_genes, num_alignments, notes){
   df_count <- rbind(df_count, c(count_sgrna, num_genes, num_alignments, notes))
@@ -156,26 +158,6 @@ transform_gene_annotation_ccds <- function(imported_ccds_data){
 
 }
 
-# temporary function to meet the requirement of cut_pos for granges alignments
-add_cut_pos_pam_pos <- function(alignment_data){
-    alignment_data <- alignment_data %>%
-        dplyr::rename(pam_start = pam_site) %>%
-        mutate(
-            pam_start = ifelse(strand == '+', pam_start, pam_start-2),
-            pam_end = ifelse(strand == '+', pam_start+2, pam_start+2),
-            start_pos = ifelse(strand == '+', pam_start-21, pam_start+3),
-            end_pos = ifelse(strand == '+', pam_start-1, pam_start+23),
-            cut_pos = ifelse(strand == '+', pam_start-4, pam_start+5),
-            unique_aln_id = paste0('sgrna_aln_', row_number())) %>%
-        relocate(pam_start, .after = cut_pos) %>%
-        relocate(start_pos, .before = cut_pos) %>%
-        relocate(end_pos, .after = start_pos) %>%
-        relocate(pam_end, .after = pam_start) %>%
-        relocate(unique_aln_id, .before = sgRNA)
-
-    return(alignment_data)
-}
-
 make_granges_from_alignment_data <- function(alignment_data){
     list_chromosome <- paste0('chr', c(1:22, 'X', 'Y'))
     genome_info <- GenomeInfoDb::Seqinfo(genome = "hg38")[list_chromosome]
@@ -217,4 +199,27 @@ find_overlaps_gene_annotation_and_alignment <- function(guide_aln_granges, gene_
 
     return(gene_df)
 
+}
+
+
+#### TEMPORARY FUNCTION
+
+# temporary function to meet the requirement of cut_pos for granges alignments
+add_cut_pos_pam_pos <- function(alignment_data){
+  alignment_data <- alignment_data %>%
+    dplyr::rename(pam_start = pam_site) %>%
+    mutate(
+      pam_start = ifelse(strand == '+', pam_start, pam_start-2),
+      pam_end = ifelse(strand == '+', pam_start+2, pam_start+2),
+      start_pos = ifelse(strand == '+', pam_start-21, pam_start+3),
+      end_pos = ifelse(strand == '+', pam_start-1, pam_start+23),
+      cut_pos = ifelse(strand == '+', pam_start-4, pam_start+5),
+      unique_aln_id = paste0('sgrna_aln_', row_number())) %>%
+    relocate(pam_start, .after = cut_pos) %>%
+    relocate(start_pos, .before = cut_pos) %>%
+    relocate(end_pos, .after = start_pos) %>%
+    relocate(pam_end, .after = pam_start) %>%
+    relocate(unique_aln_id, .before = sgRNA)
+  
+  return(alignment_data)
 }

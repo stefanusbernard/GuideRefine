@@ -87,14 +87,14 @@ library(xlsx)
 ```{r User defined variable (User input), echo = FALSE}
 
 file_dir_location <- './public_crispr_library/'
-sgRNA_library_selected <- 'avana_library'
+sgRNA_library_selected <- 'broadgpp-brunello-library-contents'
 
-ccds_filename <- 'CCDS_20250112.txt'
+ccds_filename_dir <- 'CCDS_20250112.txt'
 
 aln_2_mismatch_filename <- paste(sgRNA_library_selected, '_aln.csv', sep ='')
 
 paste('sgRNA library name:', sgRNA_library_selected)
-paste('CCDS filename:', ccds_filename)
+paste('CCDS filename:', ccds_filename_dir)
 paste('Alignmment with 2 mismatch filename (csv format):', aln_2_mismatch_filename)
 
 ```
@@ -316,78 +316,32 @@ track_table <- function_df_count(track_table,
                                  notes = paste(length(unique(sgRNA_not_target_anywhere$sgRNA)), ' sgRNAs not target anywhere discarded'))
 ```
 
-```{r Import CCDS data, include = FALSE}
+```{r Using NCBI CCDS data to find the overlap of sgRNA alignment with exon annotation, include = FALSE}
 
-ccds <- read_delim(ccds_filename, delim = '\t')
+# import ccds data
+ccds <- read_ccds_data(ccds_filename = ccds_filename_dir)
+# transform gene annotation data
+transformed_gene_annotation <- transform_gene_annotation_ccds(ccds)
 
-ccds$cds_from <- as.integer(ccds$cds_from)
-ccds$cds_to <- as.integer(ccds$cds_to)
+# take ccds_exon data from transformed gene annotation
+ccds_exon <- transformed_gene_annotation$ccds_exon
 
-ccds <- ccds %>%
-  dplyr::rename('chromosome' = '#chromosome') %>%
-  mutate(chromosome = str_c("chr", chromosome)) %>%
-  filter(ccds_status %in% c("Public", "Reviewed, update pending", "Under review, update")) %>%
-  filter(chromosome %in% list_chromosome, !is.na(cds_from), !is.na(cds_to))
+# take granges data from transformed gene annotation
+gene_annot_granges <- transformed_gene_annotation$gene_annot_granges_df
 
-```
+# add alignment id for every sgRNA alignment
+library_alignment <- library_alignment %>% 
+  mutate(unique_aln_id = paste0('sgrna_aln_', row_number())) %>%
+  relocate(unique_aln_id, .before = sgRNA)
 
-```{r Transform gene annotations, include = FALSE}
+# make granges from alignment data
+guide_aln_granges <- make_granges_from_alignment_data(library_alignment)
 
-ccds_exon <- ccds %>%
-  mutate(cds_interval = str_replace_all(cds_locations, "[\\[\\]]", "") %>% str_split("\\s*,\\s*")) %>%
-  tidyr::unnest(cds_interval) %>%
-  group_by(gene, gene_id, cds_locations) %>% 
-  mutate(exon_code = ifelse(cds_strand=="+", 1:dplyr::n(), dplyr::n():1)) %>% 
-  ungroup() %>%
-  dplyr::mutate(cds_start = str_extract(cds_interval, "^[0-9]+") %>% as.integer,
-                cds_end = str_extract(cds_interval, "[0-9]+$") %>% as.integer) %>%
-  dplyr::select(gene, gene_id, chromosome, start=cds_start, end=cds_end, strand=cds_strand,
-                gene_start=cds_from, gene_end=cds_to, exon_code)
-
-genome_info <- GenomeInfoDb::Seqinfo(genome = "hg38")[list_chromosome]
-
-gene_annot_granges <- ccds_exon %>% 
-  GenomicRanges::makeGRangesFromDataFrame(seqinfo = genome_info, 
-                                          keep.extra.columns = T, 
-                                          na.rm = TRUE)
+# final result of gene_df is a dataframe containing the overlap of gene annotation and alignment
+gene_df <- find_overlaps_gene_annotation_and_alignment(guide_aln_granges = guide_aln_granges,
+                                                       gene_annot_granges = gene_annot_granges)
 
 ```
-
-```{r make GRanges from alignment data, include = FALSE}
-
-guide_aln_granges <- library_alignment %>%
-  select(id = sgRNA, 
-         Spacer = spacer, 
-         Protospacer = protospacer, 
-         Chr = chr, 
-         Start = cut_pos, 
-         strand, 
-         mismatch = n_mismatches) %>%
-  mutate(End = Start) %>%
-  GenomicRanges::makeGRangesFromDataFrame(seqinfo = genome_info, keep.extra.columns = T)
-
-```
-
-```{r Find overlaps between gene annotation granges and alignment granges, include = FALSE}
-
-hits <- GenomicRanges::findOverlaps(guide_aln_granges, gene_annot_granges, ignore.strand=T) %>% as_tibble
-
-gene_df <- hits %>%
-  transmute(sgrna = guide_aln_granges$id[queryHits],
-            spacer = guide_aln_granges$Spacer[queryHits],
-            protospacer = guide_aln_granges$Protospacer[queryHits],
-            mismatches = guide_aln_granges$mismatch[queryHits],
-            chr = GenomicRanges::seqnames(guide_aln_granges)[queryHits] %>% as.character() ,
-            cut_pos = GenomicRanges::start(guide_aln_granges)[queryHits] %>% as.integer(),
-            strand = GenomicRanges::strand(guide_aln_granges)[queryHits] %>% as.character(),
-            gene = gene_annot_granges$gene[subjectHits],
-            CDS_strand = GenomicRanges::strand(gene_annot_granges)[subjectHits] %>% as.character(),
-            CDS_start = GenomicRanges::start(gene_annot_granges)[subjectHits] %>% as.integer(),
-            CDS_end = GenomicRanges::end(gene_annot_granges)[subjectHits] %>% as.integer()) %>%
-  distinct()
-
-```
-
 
 ## Validation of gene symbol for the alignment and annotation data
 
