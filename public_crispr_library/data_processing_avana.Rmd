@@ -4,7 +4,7 @@ library(readxl)
 setwd(getwd())
 
 # Define the Excel file path
-excel_file <- "./public_crispr_library/STable_02_AvanaLibrary.xlsx"
+excel_file <- "./STable_02_AvanaLibrary.xlsx"
 
 # Get all sheet names
 sheet_names <- readxl::excel_sheets(excel_file)

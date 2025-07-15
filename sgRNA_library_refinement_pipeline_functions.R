@@ -1,4 +1,6 @@
 library(tidyverse)
+library(dplyr)
+library(stringr)
 
 #### MAIN FUNCTIONS
 
@@ -8,6 +10,8 @@ function_df_count <- function(df_count, count_sgrna, num_genes, num_alignments, 
   kable(df_count)
   return(df_count)
 }
+
+# FUNCTION TO REMOVE MULTI-TARGET-/OFF-TARGET SGRNAS
 
 # function to keep alignment only for normal chromosome
 alignment_normal_chr <- function(alignment_data) {
@@ -64,7 +68,6 @@ single_mismatch_sgrna <- function(alignment_data) {
 }
 
 # function to remove sgRNA aligned with double mismatches at the most PAM distal site
-
 pam_distal_double_mismatch <- function(alignment_data){
     detect_pam_distal_double_mismatch <- alignment_data %>% 
         dplyr::rename(pam_start = pam_site) %>%
@@ -114,6 +117,9 @@ pam_distal_double_mismatch <- function(alignment_data){
 
 }
 
+# GENE ANNOTATION FOR EACH SGRNA SEQUENCES (1)
+
+# function to read NCBI Coding DNA sequences
 read_ccds_data <- function(ccds_filename){
     ccds <- read_delim(ccds_filename, delim = '\t')
 
@@ -132,6 +138,7 @@ read_ccds_data <- function(ccds_filename){
 
 }
 
+# function to transform gene annotation CCDS
 transform_gene_annotation_ccds <- function(imported_ccds_data){
     list_chromosome <- paste0('chr', c(1:22, 'X', 'Y'))
     genome_info <- GenomeInfoDb::Seqinfo(genome = "hg38")[list_chromosome]
@@ -158,12 +165,13 @@ transform_gene_annotation_ccds <- function(imported_ccds_data){
 
 }
 
+# function to make granges from alignment data
 make_granges_from_alignment_data <- function(alignment_data){
     list_chromosome <- paste0('chr', c(1:22, 'X', 'Y'))
     genome_info <- GenomeInfoDb::Seqinfo(genome = "hg38")[list_chromosome]
 
     guide_aln_granges <- alignment_data %>%
-        select(unique_id = unique_aln_id,
+        dplyr::select(unique_id = unique_aln_id,
                 id = sgRNA, 
                 Spacer = spacer, 
                 Protospacer = protospacer, 
@@ -179,6 +187,7 @@ make_granges_from_alignment_data <- function(alignment_data){
     return(guide_aln_granges)
 }
 
+# function to find the overlaps of gene annotation and the alignment
 find_overlaps_gene_annotation_and_alignment <- function(guide_aln_granges, gene_annot_granges) {
     hits <- GenomicRanges::findOverlaps(guide_aln_granges, gene_annot_granges, ignore.strand=T) %>% as_tibble
 
@@ -200,6 +209,64 @@ find_overlaps_gene_annotation_and_alignment <- function(guide_aln_granges, gene_
     return(gene_df)
 
 }
+
+# function to detect any previous/alias symbol based on the alignment and correct it
+process_gene_symbol <- function(gene_df) {
+  # Helper: Remove duplicated spacers per gene
+  remove_duplicate_spacers <- function(df) {
+    df %>%
+      arrange(gene, sgrna) %>%
+      group_by(gene) %>%
+      filter(!duplicated(spacer)) %>%
+      ungroup()
+  }
+  
+  # Step 1: Extract symbol from sgRNA and tag notes
+  gene_df_check <- gene_df %>%
+    filter(mismatches == 0) %>%
+    mutate(extracted_symbol = str_extract(sgrna, "(?<=sg)([A-Za-z0-9-]+)"),
+           notes = if_else(extracted_symbol == gene, "symbol match", "symbol mismatch")) %>%
+    select(-extracted_symbol)
+  
+  # Step 2: Separate and clean matched and mismatched groups
+  gene_df_match <- gene_df_check %>%
+    filter(notes == "symbol match") %>%
+    remove_duplicate_spacers()
+  
+  gene_df_mismatch <- gene_df_check %>%
+    filter(notes == "symbol mismatch") %>%
+    remove_duplicate_spacers()
+  
+  # Step 3: Re-assign IDs for mismatched (corrected) sgRNAs
+  gene_df_mismatch <- gene_df_mismatch %>%
+    group_by(gene) %>%
+    mutate(sgrna = paste0("sg", gene, "_", row_number(), "_SC")) %>%
+    ungroup() %>%
+    relocate(sgrna, .before = spacer) %>%
+    mutate(notes = "symbol corrected")
+  
+  # Step 4: Identify problematic genes (appear in both sets)
+  problematic_genes <- intersect(gene_df_match$gene, gene_df_mismatch$gene)
+  
+  corrected_exist_gene <- gene_df_match %>%
+    filter(gene %in% problematic_genes)
+  
+  gene_df_match <- gene_df_match %>%
+    filter(!gene %in% problematic_genes)
+  
+  # Step 5: Combine corrected and existing, mark duplicates
+  gene_df_mismatch <- bind_rows(gene_df_mismatch, corrected_exist_gene) %>%
+    arrange(gene, desc(notes)) %>%
+    group_by(gene) %>%
+    mutate(duplicate_spacer_gene = duplicated(spacer)) %>%
+    ungroup()
+  
+  # Step 6: Final corrected dataset
+  gene_df_corrected <- bind_rows(gene_df_match, gene_df_mismatch)
+  
+  return(gene_df_corrected)
+}
+
 
 
 #### TEMPORARY FUNCTION

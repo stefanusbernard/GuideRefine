@@ -7,3 +7,5 @@
 *.xlsx
 *.log
 *.png
+*.gz
+*.out
