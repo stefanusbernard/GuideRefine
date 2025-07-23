@@ -26,17 +26,30 @@ alignment_normal_chr <- function(alignment_data) {
 # function to remove multi-target sgRNA
 multi_target_sgrna <- function(alignment_data){
     
+    # Step 1: Identify sgRNAs that aligns perfectly with 0 mismatches to other location > 1 times
     multi_target_sgRNAs_count_dropped_guides_per_gene <- alignment_data %>%
-        filter(n_mismatches == 0) %>%
-        select(sgRNA, gene) %>%
-        count(sgRNA, gene) %>%
-        dplyr::rename('Frequency' = 'n') %>%
-        filter(Frequency > 1)
+            filter(n_mismatches == 0) %>%
+            select(sgRNA, gene) %>%
+            count(sgRNA, gene) %>%
+            dplyr::rename('Frequency' = 'n') %>%
+            filter(Frequency > 1)
+      
+    # Step 2: Identify sgRNAs with any non-zero mismatches
+    # mismatched_sgRNAs <- alignment_data %>%
+    #   filter(n_mismatches > 0) %>%
+    #   pull(sgRNA) %>%
+    #   unique()
+    # 
+    # Remove any sgRNA from Step 1 that includes n_mismatches > 0
+    # multi_target_sgRNAs_count_dropped_guides_per_gene <- perfect_hits %>%
+    #   filter(!sgRNA %in% mismatched_sgRNAs)
     
+    # Number of dropped sgRNA due to multi-target
     dropped_due_to_multi_target <- multi_target_sgRNAs_count_dropped_guides_per_gene %>%
         count(gene) %>%
         dplyr::rename('multi-target sgRNA' = 'n')
-
+    
+    # List of multi-target sgRNAs
     multi_target_sgRNA_list_guides <- c(multi_target_sgRNAs_count_dropped_guides_per_gene$sgRNA)
 
     return(list(

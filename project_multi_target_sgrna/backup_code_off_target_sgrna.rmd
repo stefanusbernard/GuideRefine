@@ -1,0 +1,154 @@
+---
+title: "Backup Code of multi_target_sgrna_analysis"
+output: github_document
+---
+# A venn diagram function to compare the similarity between three libraries
+
+```{r}
+
+venn_diagram <- function(set1, set2, name_set1, name_set2, color1, color2, name_venn) {
+  only_set1 <- length(setdiff(set1, set2))
+  only_set2 <- length(setdiff(set2, set1))
+  both_sets  <- length(intersect(set1, set2))
+
+  totalset1 <- only_set1 + both_sets
+  totalset2 <- only_set2 + both_sets
+
+  pct_set1 <- round((only_set1 / totalset1) * 100, 2)
+  pct_set2 <- round((only_set2 / totalset2) * 100, 2)
+  pct_overlap_set1 <- round((both_sets / totalset1) * 100, 2)
+  pct_overlap_set2 <- round((both_sets / totalset2) * 100, 2)
+
+  sgRNA_similarity <- venn.diagram(
+        x = list(set1, set2),
+        category.names = c(name_set1, name_set2),
+        filename = NULL,  
+        fill = c(color1, color2),
+        alpha = 0.5,
+        cex = 0,  # Set text size to 0 to hide numbers
+        cat.cex = 0.75,  # Set category label size
+        cat.pos = c(-2, 2),  # Adjust category label positions
+        cat.dist = c(0.05, 0.05),  # Adjust category label distances
+        lwd = 2
+  )
+
+  png(filename = name_venn, width = 1250, height = 1250, res = 300)
+  grid.newpage()
+  grid.draw(sgRNA_similarity)
+
+  grid.text(label = paste0(only_set2, '\n', pct_set1, '%'), x = 0.25, y = 0.50, gp = gpar(fontsize = 10))
+  grid.text(label = paste0(only_set1, '\n', pct_set2, '%'), x = 0.75, y = 0.50, gp = gpar(fontsize = 10))
+  grid.text(label = paste0(pct_overlap_set1, '%', '\nor\n', pct_overlap_set2, '%'), x = 2.5, y = 0.50, gp = gpar(fontsize = 7))
+
+  dev.off()
+}
+
+
+```
+
+# compare the similarity of all sequences between three libraries
+
+```{r}
+venn_diagram(brunello$spacer, toronto$spacer, "Brunello \n 77K sgRNAs", "Toronto V3 \n 71K sgRNAs", 'powderblue', 'mistyrose', 'VennDiagram_sgRNAs_brunello_toronto.png')
+venn_diagram(brunello$spacer, cellecta$spacer, "Brunello \n 77K sgRNAs", "Cellecta \n 150K sgRNAs", 'powderblue', 'lightgreen', 'VennDiagram_sgRNAs_brunello_cellecta.png') 
+venn_diagram(toronto$spacer, cellecta$spacer, "Toronto V3 \n 77K sgRNAs", "Cellecta \n 150K sgRNAs", 'mistyrose', 'lightgreen', 'VennDiagram_sgRNAs_toronto_cellecta.png') 
+```
+
+# off-target guides
+
+```{r}
+# get list off target guides
+list_off_target_guides <- function(alignment_data) {
+  # start with multi-target sgRNA
+  multi_target_library <- multi_target_sgrna(alignment_data)
+  
+  # removal of multi-target sgRNA from the library
+  alignment_data_2 <- alignment_data %>%
+    filter(!sgRNA %in% multi_target_library$list_guides)
+  
+  # continue with single mismatch sgRNA
+  single_mismatch_library <- single_mismatch_sgrna(alignment_data_2)
+  
+  # removal of single mismatch sgRNA from the library
+  alignment_data_3 <- alignment_data_2 %>%
+    filter(!sgRNA %in% single_mismatch_library$list_guides)
+  
+  # continue with pam double mismatch sgRNA
+  pam_double_mismatch_library <- pam_distal_double_mismatch(alignment_data_3)
+  
+  list_off_target_guides <- unique(union(multi_target_library$list_guides, unique(union(single_mismatch_library$list_guides, pam_double_mismatch_library$list_guides))))
+  
+  return(list(
+    multi_target_guides = unique(multi_target_library$list_guides),
+    single_mismatch_guides = unique(single_mismatch_library$list_guides), 
+    pam_double_mismatch_guides = unique(pam_double_mismatch_library$list_guides),
+    all_off_target_guides = list_off_target_guides))
+}
+```
+
+# off target annotation
+
+```{r}
+# off target annotation (can be multi-target, single-mismatch, or pam-distal double mismatches) used to annotate whether the sgRNA target random genomic loci, protein-coding genes or intended target gene
+
+off_target_annotation <- function(alignment_data, num_mismatch, library, library_name){
+  gene_df <- annotate_off_target(alignment_data)
+  gene_df <- gene_df %>%
+    dplyr::rename('actual_chr' = 'chr',
+                  'actual_gene' = 'gene')
+
+  alignment_data <- add_cut_pos_pam_pos(alignment_data)
+  alignment_data <- alignment_data %>%
+    select(unique_aln_id, sgRNA, spacer, protospacer, gene, chr, n_mismatches, cut_pos) %>%
+    dplyr::rename('sgrna' = 'sgRNA')
+  
+  # one version of alignment data for paralog analysis (you will need the actual gene to detect which multi-target sgRNA targeting only two protein-coding genes - one is the actual gene, the other one is the paralog pairs)
+  alignment_data_gene_df_1 <- alignment_data %>%
+    left_join(gene_df, by = join_by(unique_aln_id, sgrna, spacer, protospacer, cut_pos)) %>%
+    select(unique_aln_id, sgrna, spacer, protospacer, gene, chr, n_mismatches, cut_pos, actual_chr, actual_gene) %>%
+    filter(n_mismatches == num_mismatch) %>%
+    mutate(target = case_when(gene == actual_gene ~ 'actual gene',
+                              gene != actual_gene ~ 'protein-coding genes',
+                              is.na(actual_gene) ~ 'other genomic loci'))
+  
+  # 2nd version of alignment data for frequency table and histogram plot
+  alignment_data_gene_df_2 <- alignment_data_gene_df_1 %>%
+    filter(target != 'actual gene')
+  
+  summary_target_df <- alignment_data_gene_df_2 %>%
+    select(sgrna, target) %>%
+    group_by(sgrna) %>%
+    mutate(target = ifelse(n() > 1, 'other genomic loci or protein-coding genes', target)) %>%
+    ungroup() %>%
+    distinct()
+  
+  calculate_freq_table <- summary_target_df %>%
+    select(target) %>%
+    count(target) %>%
+    dplyr::rename('count_sgrna' = 'n') %>%
+    arrange(desc(count_sgrna)) %>%
+    mutate(percent = round(count_sgrna/length(library$sgRNA)*100 ,2),
+           library = library_name)
+
+  return(list(
+    aln_data_df_1 = alignment_data_gene_df_1,
+    aln_data_df_2 = alignment_data_gene_df_2,
+    summary_df = summary_target_df, 
+    freq_table = calculate_freq_table))
+}
+```
+
+
+# Count on-target alignments
+
+```{r}
+count_on_target_alignments <- library_alignment %>%
+  count(sgRNA, protospacer) %>%
+  mutate(n = if_else(is.na(protospacer), 0, n)) %>%
+  dplyr::rename("number_of_alignments" = 'n') %>%
+  select(-protospacer) %>%
+  group_by(sgRNA) %>%
+  summarise(number_of_alignments = sum(number_of_alignments), .groups = "drop")
+
+```
+

@@ -48,6 +48,7 @@ source("sgRNA_library_refinement_pipeline_functions.R")
 list_packages_bioconductor <- c("crisprBase",
                                 "crisprBowtie",
                                 "BSgenome.Hsapiens.UCSC.hg38",
+                                "BSgenome.Hsapiens.NCBI.GRCh38",
                                 "BSgenome.Hsapiens.NCBI.T2T.CHM13v2.0",
                                 "GenomicRanges")
 
@@ -74,6 +75,7 @@ library(crisprBase)
 library(crisprBowtie)
 library(Rbowtie)
 library(BSgenome.Hsapiens.UCSC.hg38)
+library(BSgenome.Hsapiens.NCBI.GRCh38)
 library(BSgenome.Hsapiens.NCBI.T2T.CHM13v2.0)
 library(GenomicRanges)
 library(hgnc)
@@ -93,7 +95,7 @@ library(xlsx)
 file_dir_location <- "./public_crispr_library/"
 
 # name of sgRNA library (without file format)
-sgRNA_library_selected <- "broadgpp-brunello-library-contents"
+sgRNA_library_selected <- "avana_library"
 
 # directory for NCBI CCDS data
 ccds_filename_dir <- "CCDS_20250112.txt"
@@ -712,7 +714,32 @@ total_sgRNA_or_gene <- total_sgRNA_or_gene_lost %>%
 
 ```
 
-## Export the refined library and sgRNA cleaning report
+```{r Create a dataframe what sgRNA lost during each process, include = FALSE}
+
+max_len <- max(length(result_multi_target_sgrna$list_guides), 
+               length(result_single_mismatch_sgrna$list_guides), 
+               length(result_pam_distal_double_mismatch$list_guides),
+               length(sgRNA_not_target_anywhere$sgRNA),
+               length(list_sgRNA_not_target_exon))
+
+pad <- function(x, n) {
+  length(x) <- n 
+  return(x)
+}
+
+list_discarded_sgrna <- data.frame(
+  multi_target_guides = pad(result_multi_target_sgrna$list_guides, max_len),
+  single_mismatch_guides = pad(result_single_mismatch_sgrna$list_guides, max_len),
+  pam_distal_double_mismatch_guides = pad(result_pam_distal_double_mismatch$list_guides, max_len),
+  guides_not_target_anywhere = pad(sgRNA_not_target_anywhere$`sgRNA not target anywhere`, max_len),
+  # guides_not_target_exon = pad(list_sgRNA_not_target_exon, max_len),
+  stringsAsFactors = FALSE
+)
+
+
+```
+
+## Export the refined library, sgRNA cleaning report, and list discarded sgRNA
 -   Export cleaned sgRNA library (TSV file)
 -   Export total sgRNA or gene lost (Excel file)
 
@@ -730,9 +757,17 @@ value <- paste0(round(length(sgRNA_library_refined$sgRNA) / 1000, digits = 0), "
 write_tsv(sgRNA_library_refined, 
           file = paste("./output_cleaning/", sgRNA_library_selected, "_", value, "_refined.tsv", sep = ""), col_names = FALSE)
 
+write_tsv(list_discarded_sgrna, 
+          file = paste("./output_cleaning/", sgRNA_library_selected, "_disposed_sgRNAs.tsv", sep = ""), col_names = TRUE)
+
 write.xlsx(total_sgRNA_or_gene, file = paste("./output_cleaning/", sgRNA_library_selected, "_full_report.xlsx", sep = ""), row.names = FALSE, sheetName = "Genes Report", append = TRUE)
+
 write.xlsx(track_table, file = paste("./output_cleaning/", sgRNA_library_selected, "_full_report.xlsx", sep = ""), row.names = FALSE, sheetName = "Refining Process Tracker", append = TRUE)
 
+```
+
+
+```{r}
 
 ```
 
