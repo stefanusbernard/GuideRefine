@@ -1,5 +1,5 @@
 ---
-title: "annotation of multi-target sgRNAs"
+title: "Analysis of multi-target and off-target sgRNAs across libraries"
 author: "Author: Stefanus Bernard"
 date: "Date: `r format(Sys.time(), '%d %B %Y')`"
 output: 
@@ -19,7 +19,7 @@ library(ggbreak)
 source('../sgRNA_library_refinement_pipeline_functions.R')
 ```
 
-# List of functions
+# Function to import data
 
 ```{r}
 # import sgRNA library
@@ -47,71 +47,26 @@ import_list_off_target_guides <- function(data_dir) {
     ))
 }
 
-# annotate off-target sgRNAs
-annotate_off_target <- function(alignment_data) {
-  ccds <- read_ccds_data('../CCDS_20250112.txt')
-  transformed_ccds <- transform_gene_annotation_ccds(ccds)
-  modified_alignment <- add_cut_pos_pam_pos(alignment_data)
-  off_target_granges <- make_granges_from_alignment_data(modified_alignment)
-  gene_df_overlap <- find_overlaps_gene_annotation_and_alignment(off_target_granges, transformed_ccds$gene_annot_granges_df)
-  return(gene_df_overlap)
-}
+```
 
-# off target annotation (can be multi-target, single-mismatch, or pam-distal double mismatches) used to annotate whether the sgRNA target random genomic loci, protein-coding genes or intended target gene
+# Import alignment data of each sgRNA libraries and library
 
-off_target_annotation <- function(alignment_data, library, list_sgrna, num_mismatches, library_name){
-  
-  alignment_data <- alignment_data %>% filter(sgRNA %in% list_sgrna)
-  
-  gene_df <- annotate_off_target(alignment_data)
-  gene_df <- gene_df %>%
-    dplyr::rename('actual_chr' = 'chr',
-                  'actual_gene' = 'gene')
+```{r}
 
-  alignment_data <- add_cut_pos_pam_pos(alignment_data)
-  alignment_data <- alignment_data %>%
-    select(unique_aln_id, sgRNA, spacer, protospacer, gene, chr, n_mismatches, cut_pos) %>%
-    dplyr::rename('sgrna' = 'sgRNA')
-  
-  # one version of alignment data for paralog analysis (you will need the actual gene to detect which multi-target sgRNA targeting only two protein-coding genes - one is the actual gene, the other one is the paralog pairs)
-  alignment_data_gene_df <- alignment_data %>%
-    filter(n_mismatches == num_mismatches) %>%
-    left_join(gene_df, by = join_by(unique_aln_id, sgrna, spacer, protospacer, cut_pos)) %>%
-    select(unique_aln_id, sgrna, spacer, protospacer, gene, chr, n_mismatches, cut_pos, actual_chr, actual_gene) %>%
-    mutate(target = case_when(gene == actual_gene ~ 'actual target gene',
-                              gene != actual_gene ~ 'other protein-coding genes',
-                              is.na(actual_gene) ~ 'other genomic loci')) %>%
-    distinct()
-  
-  multiple_aln_same_target <- alignment_data_gene_df %>%
-    filter(target == "actual target gene") %>%
-    count(sgrna) %>%
-    filter(n > 1) %>%
-    dplyr::rename("number_of_alignments" = "n")
-  
-  summary_target_df <- alignment_data_gene_df %>%
-    filter(target != "actual target gene") %>%
-    select(sgrna, target) %>%
-    group_by(sgrna) %>%
-    mutate(target = ifelse(n() > 1, 'other protein-coding genes', target)) %>%
-    ungroup() %>%
-    distinct()
-  
-  calculate_freq_table <- summary_target_df %>%
-    select(target) %>%
-    count(target) %>%
-    dplyr::rename('count_sgrna' = 'n') %>%
-    arrange(desc(count_sgrna)) %>%
-    mutate(percent_sgrna_among_library = round(count_sgrna/length(unique(library$sgRNA))*100 ,2),
-           percent_sgrna_among_off_target = round(count_sgrna/length(unique(alignment_data_gene_df$sgrna))*100, 2),
-           library = library_name)
+avana_library_meyers <- import_sgrna_library("../public_crispr_library/avana_library.tsv")
+avana_alignment_meyers <- alignment_normal_chr(import_sgrna_library_alignment("../object_intermediate/avana_library_aln.csv") %>% distinct())
 
-  return(list(
-    aln_data_df = alignment_data_gene_df,
-    multiple_aln_same_target = multiple_aln_same_target,
-    summary_df = summary_target_df, 
-    freq_table = calculate_freq_table))
-}
+brunello_library <- import_sgrna_library("../public_crispr_library/broadgpp-brunello-library-contents.tsv")
+brunello_alignment <- alignment_normal_chr(import_sgrna_library_alignment("../object_intermediate/broadgpp-brunello-library-contents_aln.csv") %>% distinct())
+
+toronto_library <- import_sgrna_library("../public_crispr_library/tkov3_guide_sequence.tsv")
+toronto_alignment <- alignment_normal_chr(import_sgrna_library_alignment("../object_intermediate/tkov3_guide_sequence_aln.csv") %>% distinct())
+
+yusa_library <- import_sgrna_library("../public_crispr_library/yusa_hcrispr_ko_grnas.tsv")
+yusa_alignment <- alignment_normal_chr(import_sgrna_library_alignment("../object_intermediate/yusa_hcrispr_ko_grnas_aln.csv") %>% distinct())
+
+cellecta_M1_library <- import_sgrna_library("../cellecta_library/sample_M1_150K.tsv")
+cellecta_M1_alignment <- alignment_normal_chr(import_sgrna_library_alignment("../object_intermediate/sample_M1_150K_aln.csv") %>% distinct())
 
 ```
 
@@ -165,27 +120,6 @@ visualize_off_target_alignment <- function(alignment_bin_df) {
 
 ```
 
-# Import alignment data of each sgRNA libraries and library
-
-```{r}
-
-avana_library_meyers <- import_sgrna_library("../public_crispr_library/avana_library.tsv")
-avana_alignment_meyers <- alignment_normal_chr(import_sgrna_library_alignment("../object_intermediate/avana_library_aln.csv") %>% distinct())
-
-brunello_library <- import_sgrna_library("../public_crispr_library/broadgpp-brunello-library-contents.tsv")
-brunello_alignment <- alignment_normal_chr(import_sgrna_library_alignment("../object_intermediate/broadgpp-brunello-library-contents_aln.csv") %>% distinct())
-
-toronto_library <- import_sgrna_library("../public_crispr_library/tkov3_guide_sequence.tsv")
-toronto_alignment <- alignment_normal_chr(import_sgrna_library_alignment("../object_intermediate/tkov3_guide_sequence_aln.csv") %>% distinct())
-
-yusa_library <- import_sgrna_library("../public_crispr_library/yusa_hcrispr_ko_grnas.tsv")
-yusa_alignment <- alignment_normal_chr(import_sgrna_library_alignment("../object_intermediate/yusa_hcrispr_ko_grnas_aln.csv") %>% distinct())
-
-cellecta_M1_library <- import_sgrna_library("../cellecta_library/sample_M1_150K.tsv")
-cellecta_M1_alignment <- alignment_normal_chr(import_sgrna_library_alignment("../object_intermediate/sample_M1_150K_aln.csv") %>% distinct())
-
-```
-
 # Stratify the number of perfect alignment for each sgRNAs
 
 ```{r}
@@ -208,10 +142,87 @@ visualize_off_target_alignment(cellecta_M1_stratify_multi_target[[2]])
 
 ```
 
-# Percentage of sgRNA with alignment >= 2 that targets protein-coding genes
 
-### What is percentage of sgRNAS that target multiple genomic sites perfectly?
-### What is percentage of sgRNAS that target multiple protein-coding genes perfectly?
+# What is percentage of sgRNAS that perfectly target multiple genomics sites and protein-coding genes perfectly?
+
+## Function to annotate multi-target-/off-target sgRNAs
+
+```{r}
+
+# annotate off-target sgRNAs
+annotate_off_target <- function(alignment_data) {
+  ccds <- read_ccds_data('../CCDS_20250112.txt')
+  transformed_ccds <- transform_gene_annotation_ccds(ccds)
+  modified_alignment <- add_cut_pos_pam_pos(alignment_data)
+  off_target_granges <- make_granges_from_alignment_data(modified_alignment)
+  gene_df_overlap <- find_overlaps_gene_annotation_and_alignment(off_target_granges, transformed_ccds$gene_annot_granges_df)
+  return(gene_df_overlap)
+}
+
+# off target annotation (can be multi-target, single-mismatch, or pam-distal double mismatches) used to annotate whether the sgRNA target random genomic loci, protein-coding genes or intended target gene
+
+off_target_annotation <- function(alignment_data, library, list_sgrna, num_mismatches, library_name){
+  
+  alignment_data <- alignment_data %>% filter(sgRNA %in% list_sgrna)
+  
+  gene_df <- annotate_off_target(alignment_data)
+  gene_df <- gene_df %>%
+    dplyr::rename('actual_chr' = 'chr',
+                  'actual_gene' = 'gene')
+
+  alignment_data <- add_cut_pos_pam_pos(alignment_data)
+  alignment_data <- alignment_data %>%
+    select(unique_aln_id, sgRNA, spacer, protospacer, gene, chr, n_mismatches, cut_pos) %>%
+    dplyr::rename('sgrna' = 'sgRNA')
+  
+  # one version of alignment data for paralog analysis (you will need the actual gene to detect which multi-target sgRNA targeting only two protein-coding genes - one is the actual gene, the other one is the paralog pairs)
+  alignment_data_gene_df <- alignment_data %>%
+    filter(n_mismatches == num_mismatches) %>%
+    left_join(gene_df, by = join_by(unique_aln_id, sgrna, spacer, protospacer, cut_pos)) %>%
+    select(unique_aln_id, sgrna, spacer, protospacer, gene, chr, n_mismatches, cut_pos, actual_chr, actual_gene) %>%
+    mutate(target = case_when(gene == actual_gene ~ 'actual target gene',
+                              gene != actual_gene ~ 'other protein-coding genes',
+                              is.na(actual_gene) ~ 'other genomic loci')) %>%
+    distinct()
+  
+  summary_target_df <- alignment_data_gene_df %>%
+    filter(target != "actual target gene") %>%
+    select(sgrna, target) %>%
+    group_by(sgrna) %>%
+    # first removal of duplicate data to remove duplicate alignment to multiple locations 
+    distinct() %>%
+    # there may be a case where a single sgRNA can perfectly target both protein-coding gene and genomic loci, this code is used assign those sgRNA those sgRNA as targeting protein-coding gene only (which may result in duplicated data)
+    mutate(target = ifelse(n() > 1, 'other protein-coding genes', target)) %>%
+    ungroup() %>%
+    # second removal of duplicate data
+    distinct()
+
+  # there is a possibility a single guide target multiple locations of the same gene and other gene/random genomic locations, this code is used to separate the sgRNA that align multiple times to the same gene with those align to other gene/genomic loci
+  multiple_aln_same_target <- alignment_data_gene_df %>%
+      filter(target == "actual target gene" & !sgrna %in% summary_target_df$sgrna) %>%
+      count(sgrna) %>%
+      filter(n > 1) %>%
+      dplyr::rename("number_of_alignments" = "n")
+  
+  calculate_freq_table <- summary_target_df %>%
+    select(target) %>%
+    count(target) %>%
+    dplyr::rename('count_sgrna' = 'n') %>%
+    arrange(desc(count_sgrna)) %>%
+    mutate(percent_sgrna_among_library = round(count_sgrna/length(unique(library$sgRNA))*100 ,2),
+           percent_sgrna_among_off_target = round(count_sgrna/length(unique(alignment_data_gene_df$sgrna))*100, 2),
+           library = library_name)
+
+  return(list(
+    aln_data_df = alignment_data_gene_df,
+    multiple_aln_same_target = multiple_aln_same_target,
+    summary_df = summary_target_df, 
+    freq_table = calculate_freq_table))
+}
+
+```
+
+## Identify the target location of multi-target sgRNAs (protein-coding genes/other genomic loci)
 
 ```{r}
 
@@ -250,6 +261,11 @@ cellecta_M1_multi_protein_coding_genes <- off_target_annotation(cellecta_M1_alig
                                                                 0,
                                                                 "cellecta_M1")
 
+```
+
+## Percentage of multi-target sgRNAs in each libraries
+
+```{r}
 
 table_multi_target <- rbind(brunello_multi_protein_coding_genes$freq_table,
                             toronto_multi_protein_coding_genes$freq_table,
@@ -263,19 +279,21 @@ table_multi_target <- table_multi_target %>%
 grouped_barplot <- ggplot(table_multi_target, aes(x = factor(library, levels = c('brunello', 'toronto', 'yusa', 'avana')), y = percent_sgrna_among_library, fill = target)) +
   geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
   theme_minimal() +
-  labs(title = "", x = "sgRNA libraries", y = "Percentage of multi-target sgRNAs (%)") +
+  labs(title = "", x = "sgRNA libraries", y = "Percentage of multi-target sgRNAs (%)", fill = "Target") +
   scale_x_discrete(labels = c('brunello' = 'Brunello \n 77K sgRNAs',
                 'yusa' = 'Yusa \n 90K sgRNAs',
                 'toronto' = 'Toronto \nKnockout V3 \n 71K sgRNAs',
                 'avana' = 'Avana 78K sgRNAs')) +
-  scale_fill_manual(values = c("other genomic loci" = "#B3589A",
+  scale_fill_manual(labels = c("other genomic loci" = "Other genomic loci",
+                               "other protein-coding genes" = "Protein-coding genes"),
+                    values = c("other genomic loci" = "#B3589A",
                               "other protein-coding genes" = "#E7F7D5")) +
-  theme(axis.text.x = element_text(size = 14),
-      axis.text.y = element_text(size = 14),
-      axis.title.x = element_text(size = 16, margin = margin(r = 10)),
-      axis.title.y = element_text(size = 16, margin = margin(r = 10)),
-      legend.title = element_text(size = 14),
-      legend.text = element_text(size = 12)) +
+  theme(axis.text.x = element_text(size = 15),
+      axis.text.y = element_text(size = 15),
+      axis.title.x = element_text(size = 18, vjust = -1, margin = margin(r = 10)),
+      axis.title.y = element_text(size = 18, margin = margin(r = 10)),
+      legend.title = element_text(size = 15),
+      legend.text = element_text(size = 13)) +
   geom_text(aes(label = paste0(percent_sgrna_among_library, "%")), position = position_dodge(width = 0.8), vjust = -0.5, size = 4)  +
   ylim(0, 5)
 
@@ -283,18 +301,18 @@ grouped_barplot
 
 ggsave(
     path = './',
-    width = 15,
-    height = 15,
+    width = 10,
+    height = 10,
     dpi = 300,
     plot = grouped_barplot,
-    filename = paste('grouped_barplot_multi_target_21_jul.png', sep = ''))
-
+    filename = paste('grouped_barplot_multi_target_23_jul.png', sep = ''))
 
 ```
 
-### Are multitargeting effects more likely to target pairs of paralogs?
+# Question 1: Are multitargeting effects more likely to target pairs of paralogs?
+# Question 2: Are genes with paralogs more likely to be subject to multi-targeting effects?
 
-#### Is the proportion of sgRNAs targeting paralog pairs higher among multi-target sgRNAs compared to non-multi-target ones? (actual question to the Fisher exact test we performed)
+## Import paralog data from Barbara's paper
 
 ```{r}
 
@@ -314,13 +332,17 @@ list_paralog_gene_pairs <- function(dataset = "../barbara_36K_paralog_pairs.csv"
 }
 
 # import predicted paralog pairs from Barbara's paper
+
 predicted_paralog_pairs <- list_paralog_gene_pairs()
 
+```
+## Identify the double-target guides targeting paralog pairs and non-paralog pairs across libraries
 
+```{r}
 
 # Function to identify multi-target alignment targeting paralog pairs, strictly only for 2 protein-coding genes (paralog A1 and paralog A2)
 
-find_multi_target_paralog <- function(alignment_gene_df, list_guides, paralog_dataset) {
+find_multi_target_paralog <- function(alignment_gene_df, list_guides, paralog_dataset, library_name) {
   aln_multi_target_paralog <- alignment_gene_df %>%
     drop_na() %>%
     filter(sgrna %in% list_guides) %>%
@@ -336,7 +358,17 @@ find_multi_target_paralog <- function(alignment_gene_df, list_guides, paralog_da
   list_paralog_guides <- unique(aln_multi_target_paralog$sgrna)
   list_not_paralog_guides <- setdiff(list_guides, unique(aln_multi_target_paralog$sgrna))
   
+  # count percentage of the double target paralog guides
+  
+  count_sgrna_paralog <- length(list_paralog_guides)
+  count_sgrna_not_paralog <- length(list_not_paralog_guides)
+  percentage_sgrna_paralog <- round((count_sgrna_paralog/sum(count_sgrna_paralog, count_sgrna_not_paralog) * 100), 2)
+  percentage_sgrna_not_paralog <- round((count_sgrna_not_paralog/sum(count_sgrna_paralog, count_sgrna_not_paralog) * 100), 2)
+  
+  summary_df <- data.frame(count_sgrna_paralog, count_sgrna_not_paralog, percentage_sgrna_paralog, percentage_sgrna_not_paralog, library_name)
+  
   return(list(aln_multi_target_paralog_df = aln_multi_target_paralog,
+              summary_count_df = summary_df,
               multi_target_paralog_guides = list_paralog_guides,
               multi_target_not_paralog_guides = list_not_paralog_guides))
 
@@ -346,34 +378,101 @@ find_multi_target_paralog <- function(alignment_gene_df, list_guides, paralog_da
                                          
 # Avana paralog analysis for double-target guides
 list_query_guides_paralog <- avana_stratify_multi_target[[1]] %>% filter(alignment_bin == 2) %>% pull(sgRNA)
-avana_multi_paralog <- find_multi_target_paralog(avana_multi_protein_coding_genes[[1]], list_query_guides_paralog, predicted_paralog_pairs)
+avana_multi_paralog <- find_multi_target_paralog(avana_multi_protein_coding_genes[[1]], list_query_guides_paralog, predicted_paralog_pairs, "avana")
 
 # Among the 2878 double-target guides, 689 (23.9%) guides have their pair of targets annotated as being paralogs using the DeKegel predicted paralog datasets
 
-
 # Brunello paralog analysis for double-target guides
 list_query_guides_paralog <- brunello_stratify_multi_target[[1]] %>% filter(alignment_bin == 2) %>% pull(sgRNA)
-brunello_multi_paralog <- find_multi_target_paralog(brunello_multi_protein_coding_genes[[1]], list_query_guides_paralog, predicted_paralog_pairs)
+brunello_multi_paralog <- find_multi_target_paralog(brunello_multi_protein_coding_genes[[1]], list_query_guides_paralog, predicted_paralog_pairs, "brunello")
 
 # Among the 1747 double-target guides, 792 (45.3%) guides have their pair of targets annotated as being paralogs using the DeKegel predicted paralog datasets
 
-
 # toronto paralog analysis for double-target guides
 list_query_guides_paralog <- toronto_stratify_multi_target[[1]] %>% filter(alignment_bin == 2) %>% pull(sgRNA)
-toronto_multi_paralog <- find_multi_target_paralog(toronto_multi_protein_coding_genes[[1]], list_query_guides_paralog, predicted_paralog_pairs)
+toronto_multi_paralog <- find_multi_target_paralog(toronto_multi_protein_coding_genes[[1]], list_query_guides_paralog, predicted_paralog_pairs, "toronto")
 
 # Among the 1773 double-target guides, 57 (3.2%) guides have their pair of targets annotated as being paralogs using the DeKegel predicted paralog datasets
 
 # yusa paralog analysis for double-target guides
 list_query_guides_paralog <- yusa_stratify_multi_target[[1]] %>% filter(alignment_bin == 2) %>% pull(sgRNA)
-yusa_multi_paralog <- find_multi_target_paralog(yusa_multi_protein_coding_genes[[1]], list_query_guides_paralog, predicted_paralog_pairs)
+yusa_multi_paralog <- find_multi_target_paralog(yusa_multi_protein_coding_genes[[1]], list_query_guides_paralog, predicted_paralog_pairs, "yusa")
 
 # Among the 3,054 double-target guides, 592 (19.3%) guides have their pair of targets annotated as being paralogs using the DeKegel predicted paralog datasets
 
 
+# Summary table of double-target sgRNAs targeting paralogs
+table_dbl_target_paralog <- rbind(brunello_multi_paralog$summary_count_df,
+                                  toronto_multi_paralog$summary_count_df,
+                                  yusa_multi_paralog$summary_count_df,
+                                  avana_multi_paralog$summary_count_df)
+
+
+# Barplot of percentage of sgRNA targeting paralog pairs and non-paralog pairs across libraries
+barplot_paralog <- table_dbl_target_paralog %>%
+  arrange(library_name) %>%
+  select(-c(count_sgrna_paralog, count_sgrna_not_paralog)) %>%
+  pivot_longer(c(percentage_sgrna_paralog, percentage_sgrna_not_paralog), names_to = 'names', values_to = 'percent') %>%
+  ggplot(aes(library_name, percent, fill = names)) +
+  geom_bar(position = "stack", stat = "identity") +
+  theme_minimal() +
+  labs(title = "", x = "sgRNA libraries", y = "Percentage of double-target guides (%)", fill = "Target") +
+  scale_x_discrete(labels = c('brunello' = 'Brunello',
+                'yusa' = 'Yusa \nProject Score',
+                'toronto' = 'Toronto \nKnockout V3',
+                'avana' = 'Avana')) +
+  scale_fill_manual(labels = c("percentage_sgrna_paralog" = "Paralog pairs",
+                               "percentage_sgrna_not_paralog" = "Other protein-coding genes"),
+                    values = c("percentage_sgrna_paralog" = "#B3589A",
+                              "percentage_sgrna_not_paralog" = "#E7F7D5")) +
+  theme(axis.text.x = element_text(size = 15),
+      axis.text.y = element_text(size = 15),
+      axis.title.x = element_text(size = 18, vjust = -1, margin = margin(r = 10)),
+      axis.title.y = element_text(size = 18, margin = margin(r = 10)),
+      legend.title = element_text(size = 15),
+      legend.text = element_text(size = 13)) +
+  geom_text(aes(label = paste0(percent, "%")), position = position_stack(vjust = .5), size = 5)
+
+barplot_paralog
+
+ggsave(
+    path = './',
+    width = 10,
+    height = 10,
+    dpi = 300,
+    plot = barplot_paralog,
+    filename = paste('grouped_barplot_paralog_23_jul.png', sep = ''))
+
+
+# Barplot of percentage of genes affected by multi-target sgRNAs targeting paralog pairs
 
 
 
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
 
 # Function to identify which sgRNAs among all libraries that are not targeting paralog pairs
 
@@ -400,22 +499,6 @@ find_not_multi_target_paralog <- function(sgrna_library, alignment_gene_df, para
 
 
 # avana_not_paralog <- find_not_multi_target_paralog(avana_library_meyers, avana_multi_protein_coding_genes$aln_data_df, '../barbara_36K_paralog_pairs.csv')
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -464,28 +547,16 @@ fisher_multi_target_paralog <- function(off_target_paralog_guides, off_target_no
 
 
 
-
-
-
-
-
-
-
-
-
-# There are 561 guides making up 1257 alignments to protein-coding genes, these genes are suspected to be paralogs instead of normal protein-coding genes
-
-
-dataset_avana_fischer <- fisher_multi_target_paralog(avana_multi_target_paralog$multi_target_paralog_guides, 
-                                                        avana_multi_target_paralog$multi_target_not_paralog_guides, 
-                                                        avana_not_paralog$normal_sgrna_paralog, 
-                                                        avana_not_paralog$normal_sgrna_not_paralog,
-                                                        avana)
-
-
 ```
 
-### Are genes with paralogs more likely to be subject to multi-targeting effects?
+
+
+
+
+
+
+## Is the proportion of sgRNAs targeting paralog pairs higher among multi-target sgRNAs compared to non-multi-target ones? (actual question to the Fisher exact test we performed)
+
 
 ```{r}
 
