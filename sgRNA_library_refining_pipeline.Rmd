@@ -95,19 +95,19 @@ library(xlsx)
 file_dir_location <- "./public_crispr_library/"
 
 # name of sgRNA library (without file format)
-sgRNA_library_selected <- "avana_library"
+sgRNA_library_selected <- "public_crispr_library/avana_library.tsv"
 
 # directory for NCBI CCDS data
-ccds_filename_dir <- "CCDS_20250112.txt"
+ccds_filename_dir <- "CCDS.20221027.txt"
 
 # name output for sgRNA library alignment (.CSV file)
 aln_2_mismatch_filename <- paste(sgRNA_library_selected, "_aln.csv", sep ="")
 
 
 # Bowtie alignment indexing
-check_index_file = "hg38.1.ebwt"
-bowtie_index_dir <- "bowtie_index/hg38/"
-name_prefix_for_index <- "hg38"
+check_index_file = "GCF_009914755.1_T2T-CHM13v2.0_genomic.fna.1.ebwt"
+bowtie_index_dir <- "bowtie_index/T2T_CHM13/"
+name_prefix_for_index <- "GCF_009914755.1_T2T-CHM13v2.0_genomic.fna"
 
 
 paste("sgRNA library name:", sgRNA_library_selected)
