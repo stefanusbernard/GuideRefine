@@ -73,9 +73,8 @@ if(length(new_packages)) install.packages(new_packages)
 
 library(crisprBase)
 library(crisprBowtie)
-library(Rbowtie)
+library(GenomeInfoDb)
 library(BSgenome.Hsapiens.UCSC.hg38)
-library(BSgenome.Hsapiens.NCBI.GRCh38)
 library(BSgenome.Hsapiens.NCBI.T2T.CHM13v2.0)
 library(GenomicRanges)
 library(hgnc)
@@ -87,7 +86,7 @@ library(xlsx)
 
 ```
 
-## Detected file input
+## Parameters for the pipeline
 
 ```{r User defined variable (User input/Hardcoded), echo = FALSE}
 
@@ -95,24 +94,33 @@ library(xlsx)
 file_dir_location <- "./public_crispr_library/"
 
 # name of sgRNA library (without file format)
-sgRNA_library_selected <- "public_crispr_library/avana_library.tsv"
+sgRNA_library_selected <- "yusa_hcrispr_ko_grnas"
 
-# directory for NCBI CCDS data
-ccds_filename_dir <- "CCDS.20221027.txt"
+# change your reference genome here
+ref_bsgenome_selected <- BSgenome.Hsapiens.NCBI.T2T.CHM13v2.0
+
+# directory for NCBI CCDS data or .RDS file processed from T2T_gff_to_ccds_conversion.Rmd
+ccds_filename_dir <- "annotation_file/T2T-CHM13v2.0_gene_annot_granges.rds"
+
+# guide align granges genome (hg38 or T2T-CHM13v2.0)
+guide_aln_granges_genome <- "T2T-CHM13v2.0"
 
 # name output for sgRNA library alignment (.CSV file)
 aln_2_mismatch_filename <- paste(sgRNA_library_selected, "_aln.csv", sep ="")
 
-
 # Bowtie alignment indexing
-check_index_file = "GCF_009914755.1_T2T-CHM13v2.0_genomic.fna.1.ebwt"
-bowtie_index_dir <- "bowtie_index/T2T_CHM13/"
-name_prefix_for_index <- "GCF_009914755.1_T2T-CHM13v2.0_genomic.fna"
+check_index_file = "T2T-CHM13_BSgenome.1.ebwt"
+bowtie_index_dir <- "bowtie_index/T2T-CHM13_bsgenome/"
+name_prefix_for_index <- "T2T-CHM13_BSgenome"
+
+# check_index_file = "hg38.1.ebwt"
+# bowtie_index_dir <- "bowtie_index/hg38/"
+# name_prefix_for_index <- "hg38"
 
 
 paste("sgRNA library name:", sgRNA_library_selected)
-paste("CCDS filename:", ccds_filename_dir)
-paste("Alignmment with 2 mismatch filename (csv format):", aln_2_mismatch_filename)
+paste("CCDS or .RDS file:", ccds_filename_dir)
+paste("Genome version:", unique(genome(ref_bsgenome_selected)))
 
 ```
 
@@ -138,7 +146,7 @@ if (file_test("-f", paste(bowtie_index_dir, check_index_file, sep="")) == FALSE)
                          force = TRUE,
                          prefix = name_prefix_for_index)
 } else {
-  print(paste(check_index_file, "is in bowtie_index directory, indicating HG38 indexing by bowtie have been done previously"))
+  print(paste(check_index_file, "is in bowtie_index directory, indicating reference genome indexing by bowtie have been done previously"))
 }
 ```
 
@@ -152,9 +160,12 @@ if (file_test("-f", paste("./object_intermediate/", aln_2_mismatch_filename, sep
       
       bowtie_index <- file.path(bowtie_index_dir, name_prefix_for_index)
       
+      # change your reference genome here
+      # seqlevelsStyle(genome) <- "UCSC"
+      
       alignment_guides <- runCrisprBowtie(spacers_sequence,
                                            mode = "spacer",
-                                           bsgenome = BSgenome.Hsapiens.UCSC.hg38,
+                                           bsgenome = ref_bsgenome_selected,
                                            crisprNuclease = crisprNuclease,
                                            n_mismatches = 2,
                                            force_spacer_length = TRUE,
@@ -193,9 +204,25 @@ track_table <- function_df_count(track_table,
 ```{r Select original gene list and remove any alignment to non standard chromosome, include = FALSE}
 gene_original <- c(unique(library_alignment$gene))
 
-list_chromosome <- paste0("chr", c(1:22, "X", "Y"))
-library_alignment <- library_alignment %>%
-  filter(chr %in% list_chromosome | is.na(chr))
+# different notation between NCBI and UCSC genome format (chr and number)`
+
+# genome(ref_bsgenome_selected)
+# seqlevelsStyle(ref_bsgenome_selected)
+
+if(seqlevelsStyle(ref_bsgenome_selected) == "NCBI") {
+  
+  list_chromosome <- c(1:22, "X", "Y")
+  library_alignment <- library_alignment %>%
+    filter(chr %in% list_chromosome | is.na(chr))
+  
+} else if (seqlevelsStyle(ref_bsgenome_selected) == "UCSC") {
+  
+  list_chromosome <- paste0("chr", c(1:22, "X", "Y"))
+  library_alignment <- library_alignment %>%
+    filter(chr %in% list_chromosome | is.na(chr))
+  
+}
+
 
 ```
 
@@ -333,24 +360,44 @@ track_table <- function_df_count(track_table,
 
 ```{r Using NCBI CCDS data to find the overlap of sgRNA alignment with exon annotation, include = FALSE}
 
-# import ccds data
-ccds <- read_ccds_data(ccds_filename = ccds_filename_dir)
-# transform gene annotation data
-transformed_gene_annotation <- transform_gene_annotation_ccds(ccds)
+# if input of CCDS is .txt file, then use this branch
+if (grepl("\\.txt$", ccds_filename_dir)) {
+  
+    print(paste("Processing:", ccds_filename_dir))
+  
+    # import ccds data
+    ccds <- read_ccds_data(ccds_filename = ccds_filename_dir)
+    
+    # transform gene annotation data
+    transformed_gene_annotation <- transform_gene_annotation_ccds(ccds, chosen_genome = guide_aln_granges_genome)
+    
+    # take ccds_exon data from transformed gene annotation
+    ccds_exon <- transformed_gene_annotation$ccds_exon
+    
+    # take granges data from transformed gene annotation
+    gene_annot_granges <- transformed_gene_annotation$gene_annot_granges_df
+   
+    
+} else if (grepl("\\.rds$", ccds_filename_dir)) {
+  
+    print(paste("Processing:", ccds_filename_dir))
+  
+    # import .rds data
+    gene_annot_granges <- readRDS(file = ccds_filename_dir)
+  
+}
 
-# take ccds_exon data from transformed gene annotation
-ccds_exon <- transformed_gene_annotation$ccds_exon
-
-# take granges data from transformed gene annotation
-gene_annot_granges <- transformed_gene_annotation$gene_annot_granges_df
 
 # add alignment id for every sgRNA alignment
 library_alignment <- library_alignment %>% 
   mutate(unique_aln_id = paste0("sgrna_aln_", row_number())) %>%
   relocate(unique_aln_id, .before = sgRNA)
 
+# be careful switching between GRCh38 and T2T-CHM13v2.0
+
 # make granges from alignment data
-guide_aln_granges <- make_granges_from_alignment_data(library_alignment)
+guide_aln_granges <- make_granges_from_alignment_data(library_alignment, 
+                                                      genome = ref_bsgenome_selected)
 
 # final result of gene_df is a dataframe containing the overlap of gene annotation and alignment
 gene_df <- find_overlaps_gene_annotation_and_alignment(guide_aln_granges = guide_aln_granges,
@@ -534,6 +581,7 @@ sgRNA_not_target_exon <- library_alignment %>%
 ```
 
 ```{r Add HGNC annotation of sgRNA library, include = FALSE}
+
 hgnc <- read_tsv(url("https://storage.googleapis.com/public-download-files/hgnc/tsv/tsv/hgnc_complete_set.txt"))
 
 hgnc_selected <- hgnc %>%
@@ -766,8 +814,4 @@ write.xlsx(track_table, file = paste("./output_cleaning/", sgRNA_library_selecte
 
 ```
 
-
-```{r}
-
-```
 

@@ -10,3 +10,7 @@
 *.gz
 *.out
 *.gtf
+*.gff3
+*.rds
+*.fa
+/bowtie_index/

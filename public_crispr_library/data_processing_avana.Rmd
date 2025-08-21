@@ -1,0 +1,51 @@
+```{r}
+library(tidyverse)
+library(readxl)
+setwd(getwd())
+```
+
+## Data processing for Avana library by Fortin et al, 2019
+
+```{r}
+
+# Define the Excel file path
+excel_file <- "./STable_02_AvanaLibrary.xlsx"
+
+# Get all sheet names
+sheet_names <- readxl::excel_sheets(excel_file)
+
+# Read all sheets into a list of data frames
+sheet_list <- lapply(sheet_names, function(sheet) {
+    readxl::read_excel(excel_file, sheet = sheet)
+})
+
+# Combine all data frames into one
+all_data <- bind_rows(sheet_list, .id = "sheet_name")
+all_data <- all_data %>%
+  select(-sheet_name) %>%
+  distinct() %>%
+  arrange(desc(str_detect(`Annotated Gene Symbol`, "NO_CURRENT")), `Annotated Gene Symbol`) %>%
+  filter(!str_detect(`Annotated Gene Symbol`, "NO_CURRENT"))
+
+# Export to csv file
+write_csv(all_data, "STable_02_AvanaLibrary.csv")
+```
+
+
+## Data processing of Avana Library by Meyers et al, 2017
+
+```{r}
+
+# define text file input
+
+data <- read_tsv('./avana_library.tsv', col_names = FALSE)
+colnames(data) <- c('sgrna', 'spacer', 'gene')
+
+length(unique(data$gene))
+
+data <- data %>%
+  drop_na()
+
+```
+
+
