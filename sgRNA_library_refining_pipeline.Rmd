@@ -106,13 +106,15 @@ ccds_filename_dir <- "annotation_file/T2T-CHM13v2.0_gene_annot_granges.rds"
 guide_aln_granges_genome <- "T2T-CHM13v2.0"
 
 # name output for sgRNA library alignment (.CSV file)
+aln_file_dir <- "./object_intermediate/T2T-CHM13_bsgenome/"
 aln_2_mismatch_filename <- paste(sgRNA_library_selected, "_aln.csv", sep ="")
 
-# Bowtie alignment indexing
+# Bowtie alignment indexing for T2T reference genome
 check_index_file = "T2T-CHM13_BSgenome.1.ebwt"
 bowtie_index_dir <- "bowtie_index/T2T-CHM13_bsgenome/"
 name_prefix_for_index <- "T2T-CHM13_BSgenome"
 
+# Bowtie alignment indexing for hg38 reference genome
 # check_index_file = "hg38.1.ebwt"
 # bowtie_index_dir <- "bowtie_index/hg38/"
 # name_prefix_for_index <- "hg38"
@@ -152,7 +154,7 @@ if (file_test("-f", paste(bowtie_index_dir, check_index_file, sep="")) == FALSE)
 
 ```{r Check whether alignment has been done, include = FALSE}
 
-if (file_test("-f", paste("./object_intermediate/", aln_2_mismatch_filename, sep = "")) == FALSE) {
+if (file_test("-f", paste(aln_file_dir, aln_2_mismatch_filename, sep = "")) == FALSE) {
       data(SpCas9, package="crisprBase")
       crisprNuclease <- SpCas9
       
@@ -187,7 +189,7 @@ if (file_test("-f", paste("./object_intermediate/", aln_2_mismatch_filename, sep
 
 ```{r import csv file from the alignment, echo = FALSE, include = FALSE}
 
-library_alignment <- read_csv(paste("./object_intermediate/", aln_2_mismatch_filename, sep = ""))
+library_alignment <- read_csv(paste(aln_file_dir, aln_2_mismatch_filename, sep = ""))
 
 ```
 
@@ -697,22 +699,23 @@ paste("number of genes lost: ", num_original_genes-num_genes_after_cleaning_3_gu
 
 ## Final report of refined sgRNA library
 
-```{r, echo = FALSE}
-
-track_table <- function_df_count(track_table,
-                                 count_sgrna = length(unique(sgRNA_library_cleaned$sgRNA)),
-                                 num_genes = length(unique(sgRNA_library_cleaned$gene)),
-                                 num_alignments = "-",
-                                 notes = paste(length(unique(guides_below_3$gene)), " genes discarded (< 3 sgRNAs)"))
-
-colnames(track_table) <- c("count_sgrna", "num_genes", "num_alignments", "notes")
-kable(track_table)
-```
-
 ```{r Combine the control sgRNA back with the original dataframe, include = FALSE}	
 
 # Add control sgRNA (sgRNA_library_control)
 sgRNA_library_refined <- rbind(sgRNA_library_control, sgRNA_library_cleaned)
+
+```
+
+```{r, echo = FALSE}
+
+track_table <- function_df_count(track_table,
+                                 count_sgrna = length(unique(sgRNA_library_refined$sgRNA)),
+                                 num_genes = length(unique(sgRNA_library_refined$gene)),
+                                 num_alignments = "-",
+                                 notes = paste(length(unique(guides_below_3$gene)), " genes targeted by < 3 sgRNAs"))
+
+colnames(track_table) <- c("count_sgrna", "num_genes", "num_alignments", "notes")
+kable(track_table)
 
 ```
 

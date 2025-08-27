@@ -179,10 +179,10 @@ transform_gene_annotation_ccds <- function(imported_ccds_data, chosen_genome){
 }
 
 # function to make granges from alignment data
-make_granges_from_alignment_data <- function(alignment_data, genome){
+make_granges_from_alignment_data <- function(alignment_data, ref_bsgenome_selected){
   
     if(seqlevelsStyle(ref_bsgenome_selected) == "NCBI") {
-      list_chromosome <- c(1:22, "X", "Y")
+      list_chromosome <- c(1:22, "X", "Y", "MT")
     } else if (seqlevelsStyle(ref_bsgenome_selected) == "UCSC") {
       list_chromosome <- paste0("chr", c(1:22, "X", "Y"))
     }
