@@ -15,7 +15,7 @@ output:
 
 ## Input data
 1. sgRNA library TSV file input for MAGeCK (Format: sgRNA, spacer, gene; without header)
-2. Human genome GRCh38 indexed in bowtie
+2. Reference genome indexed using bowtie tool (can be hg38 or T2T-CHM13)
 3. CCDS annotation file. Look for the current release here: https://ftp.ncbi.nlm.nih.gov/pub/CCDS/current_human/
 4. HGNC (Hugo Gene Nomenclature Committee) annotation file. Look for the current release here: https://www.genenames.org/download/custom/
 
@@ -48,7 +48,6 @@ source("sgRNA_library_refinement_pipeline_functions.R")
 list_packages_bioconductor <- c("crisprBase",
                                 "crisprBowtie",
                                 "BSgenome.Hsapiens.UCSC.hg38",
-                                "BSgenome.Hsapiens.NCBI.GRCh38",
                                 "BSgenome.Hsapiens.NCBI.T2T.CHM13v2.0",
                                 "GenomicRanges")
 
@@ -75,7 +74,7 @@ library(crisprBase)
 library(crisprBowtie)
 library(GenomeInfoDb)
 library(BSgenome.Hsapiens.UCSC.hg38)
-library(BSgenome.Hsapiens.NCBI.T2T.CHM13v2.0)
+library(BSgenome.Hsapiens.NCBI.T2TCHM13v2.0)
 library(GenomicRanges)
 library(hgnc)
 library(stringr)
@@ -94,10 +93,10 @@ library(xlsx)
 file_dir_location <- "./public_crispr_library/"
 
 # name of sgRNA library (without file format)
-sgRNA_library_selected <- "yusa_hcrispr_ko_grnas"
+sgRNA_library_selected <- "Jacquere_PerGuideAnnotations_Quota4"
 
 # change your reference genome here
-ref_bsgenome_selected <- BSgenome.Hsapiens.NCBI.T2T.CHM13v2.0
+ref_bsgenome_selected <- BSgenome.Hsapiens.NCBI.T2TCHM13v2.0
 
 # directory for NCBI CCDS data or .RDS file processed from T2T_gff_to_ccds_conversion.Rmd
 ccds_filename_dir <- "annotation_file/T2T-CHM13v2.0_gene_annot_granges.rds"
@@ -178,7 +177,7 @@ if (file_test("-f", paste(aln_file_dir, aln_2_mismatch_filename, sep = "")) == F
         left_join(alignment_guides, by = join_by(spacer))
       
       write.csv(alignment_data, 
-                file = paste("./object_intermediate/", aln_2_mismatch_filename, sep = ""), 
+                file = paste(aln_file_dir, aln_2_mismatch_filename, sep = ""), 
                 row.names = FALSE)
   
 } else {
@@ -399,9 +398,9 @@ library_alignment <- library_alignment %>%
 
 # make granges from alignment data
 guide_aln_granges <- make_granges_from_alignment_data(library_alignment, 
-                                                      genome = ref_bsgenome_selected)
+                                                      ref_bsgenome_selected = ref_bsgenome_selected)
 
-# final result of gene_df is a dataframe containing the overlap of gene annotation and alignment
+# final result of gene_df in a dataframe containing the overlap of gene annotation and alignment
 gene_df <- find_overlaps_gene_annotation_and_alignment(guide_aln_granges = guide_aln_granges,
                                                        gene_annot_granges = gene_annot_granges)
 
@@ -476,7 +475,7 @@ list_corrected_exist_gene <- intersect(gene_df_match$gene, gene_df_mismatch$gene
 corrected_exist_gene <- gene_df_match %>%
   filter(gene %in% list_corrected_exist_gene)
 
-# filter out problematic gene (gene that were targeted by sgRNA in Cellecta library, but also targeted by another sgRNA with corrected symbol)
+# filter out problematic gene (gene that originally targeted by sgRNA in the library, but also targeted by another sgRNA with corrected symbol)
 gene_df_match <- gene_df_match %>%
   filter(!gene %in% list_corrected_exist_gene)
 
@@ -521,8 +520,15 @@ gene_track_annotation <- gene_df_check %>%
   select(sgrna, gene, notes) %>%
   mutate(old_gene = str_extract(sgrna, "(?<=sg)([A-Za-z0-9-]+)")) %>%
   relocate(old_gene, .before = gene) %>%
+  distinct() %>%
   select(-sgrna) %>%
-  distinct()
+  group_by(old_gene, gene, notes) %>%
+  summarise(`Additional sgRNA (Corrected)` = n()) %>%
+  ungroup()
+
+# corrected_sgrna_report : a dataframe from gene_track_annotation used for the report
+corrected_sgrna_report <- gene_track_annotation %>%
+  select(-c(old_gene, notes))
 
 prev_gene <- c(gene_track_annotation$old_gene)
 align_gene <- c(gene_track_annotation$gene)
@@ -721,8 +727,6 @@ kable(track_table)
 
 ```{r Calculate total sgRNAs and genes lost, include = FALSE}
 
-# filter(str_detect(gene, terms_for_filtering))
-
 total_sgRNA_or_gene_lost <- data.frame("gene" = sgRNA_library$gene) %>%
   count(gene) %>%
   dplyr::rename("sgRNA number" = "n") %>%
@@ -736,8 +740,15 @@ total_sgRNA_or_gene_lost <- data.frame("gene" = sgRNA_library$gene) %>%
   mutate(`sgRNA not target anywhere` = replace_na(`sgRNA not target anywhere`, 0)) %>%
   left_join(sgRNA_not_target_exon, by = "gene") %>%
   mutate(`sgRNA not target exon` = replace_na(`sgRNA not target exon`, 0)) %>%
+  
+  full_join(corrected_sgrna_report, by = "gene") %>%
+  mutate(`Additional sgRNA (Corrected)` = replace_na(`Additional sgRNA (Corrected)`, 0)) %>%
+  
+  replace(is.na(.), 0) %>%
+  
   mutate(
-    `counted total sgRNA` = `sgRNA number` - (`multi-target sgRNA` + `single mismatch sgRNA` + `PAM distal double mismatch` + `sgRNA not target anywhere` + `sgRNA not target exon`)) %>%
+    `counted total sgRNA` = abs(`sgRNA number` - (`multi-target sgRNA` + `single mismatch sgRNA` + `PAM distal double mismatch` + `sgRNA not target anywhere` + `sgRNA not target exon`) + `Additional sgRNA (Corrected)`)) %>%
+  
   mutate(`symbol change` = case_when(gene %in% gene_track_annotation$old_gene ~
                                        gene_track_annotation$gene[match(gene, gene_track_annotation$old_gene)],
                                         TRUE ~ "no")) %>%
@@ -754,14 +765,15 @@ total_sgRNA_or_gene <- total_sgRNA_or_gene_lost %>%
   mutate(`actual total sgRNA` = replace_na(`actual total sgRNA`, 0)) %>%
   relocate(`actual total sgRNA`, .after = `counted total sgRNA`) %>%
   mutate(`number match` = mapply(identical,                 
-                                 `counted total sgRNA`, 
-                                 `actual total sgRNA`)) %>%
+                                 as.numeric(`counted total sgRNA`), 
+                                 as.numeric(`actual total sgRNA`))) %>%
   relocate(`number match`, .after = `actual total sgRNA`) %>%
   mutate(`quality check` = case_when((`symbol change` != "no") ~ "not counted (symbol change)",
                                      (`actual total sgRNA` > 2 & `protein-coding gene` == "yes") ~ "pass",
                                      TRUE ~ "fail")) %>%
   mutate(`quality check` = ifelse(gene %in% unique(sgRNA_library_control$gene), "pass", `quality check`)) %>%
-  arrange(factor(gene, levels = c(unique(sgRNA_library_control$gene), setdiff(unique(gene), unique(sgRNA_library_control$gene)))))
+  arrange(factor(gene, levels = c(unique(sgRNA_library_control$gene), setdiff(unique(gene), unique(sgRNA_library_control$gene))))) %>%
+  distinct()
 
 ```
 
