@@ -1,6 +1,6 @@
 ---
-title: "sgRNA Library Cleaning Pipeline"
-author: "Author: Stefanus Bernard; small adaptation from Barbara & Ryan (2019)"
+title: "GuideRefine: a tool to remove multi-target-/off-target sgRNAs from CRISPR-Cas9 KO screens libraries"
+author: "Author: Stefanus Bernard"
 date: "Date: `r format(Sys.time(), '%d %B %Y')`"
 output: 
     html_document:
