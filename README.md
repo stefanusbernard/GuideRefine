@@ -1,4 +1,4 @@
-# CRISPR sgRNA Library Refining tool
+# GuideRefine: a tool to capture and remove multi-target-/off-target sgRNAs from CRISPR-Cas9 KO libraries
 a tool (R Markdown) to clean the CRISPR sgRNA library from:
 - suspected multi-target sgRNAs
 - off-target sgRNAs (align with single mismatch or double mismatch at the PAM distal site)
