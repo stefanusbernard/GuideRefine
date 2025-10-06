@@ -1,5 +1,5 @@
 ---
-title: "GuideRefine: a tool to remove multi-target-/off-target sgRNAs from CRISPR-Cas9 KO screens libraries"
+title: "GuideRefine: a tool to remove multi-target-/off-target sgRNAs from CRISPR-Cas9 KO screens library"
 author: "Author: Stefanus Bernard"
 date: "Date: `r format(Sys.time(), '%d %B %Y')`"
 output: 
