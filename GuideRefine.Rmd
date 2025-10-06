@@ -93,7 +93,7 @@ library(xlsx)
 file_dir_location <- "./public_crispr_library/"
 
 # name of sgRNA library (without file format)
-sgRNA_library_selected <- "Jacquere_PerGuideAnnotations_Quota4"
+sgRNA_library_selected <- "human_geckov2_library_combined_09mar2015"
 
 # change your reference genome here
 ref_bsgenome_selected <- BSgenome.Hsapiens.NCBI.T2TCHM13v2.0
@@ -825,7 +825,7 @@ write_tsv(list_discarded_sgrna,
 
 write.xlsx(total_sgRNA_or_gene, file = paste("./output_cleaning/", sgRNA_library_selected, "_full_report.xlsx", sep = ""), row.names = FALSE, sheetName = "Genes Report", append = TRUE)
 
-write.xlsx(track_table, file = paste("./output_cleaning/", sgRNA_library_selected, "_full_report.xlsx", sep = ""), row.names = FALSE, sheetName = "Refining Process Tracker", append = TRUE)
+write.xlsx(track_table, file = paste("./output_cleaning/", sgRNA_library_selected, "_full_report.xlsx", sep = ""), row.names = FALSE, sheetName = "Refining Process Tracker", append = TRUE)a
 
 ```
 

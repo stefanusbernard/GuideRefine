@@ -1,6 +1,6 @@
 # Public CRISPR sgRNA library resources
 
-1. Brunello library
+1. Brunello library (4 sgRNAs/gene by Doench et al, 2016) - https://pmc.ncbi.nlm.nih.gov/articles/PMC4744125/
 2. Gecko V2 library
 3. Avana library (4 sgRNAs/gene by Meyers et al, 2017) - https://www.nature.com/articles/ng.3984#Sec24
 
@@ -11,6 +11,8 @@
 
 4. Avana library (6 sgRNAs/gene) by Fortin et al, 2019 - https://genomebiology.biomedcentral.com/articles/10.1186/s13059-019-1621-7#Sec25
 
-4. Toronto KO V3 library - 
-5. Yusa Project Score library - https://www.nature.com/articles/s41586-019-1103-9#Sec45
+5. Avana library () by Doench et al, 2016 - https://www.nature.com/articles/nbt.3437#Sec24
+
+6. Toronto KO V3 library - 
+7. Yusa Project Score library - https://www.nature.com/articles/s41586-019-1103-9#Sec45
 

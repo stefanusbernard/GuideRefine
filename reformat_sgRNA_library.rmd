@@ -100,15 +100,14 @@ function_export_table <- function(library_table, filename) {
 ```{r}
 
 file_dir <- "./public_crispr_library/"
-filename <- "Jacquere_PerGuideAnnotations_Quota4.csv"
+filename <- "avana_library.txt"
 
 exported_filename <- sub("\\..*$", "", filename)
-sgRNA_library <- read_csv(paste(file_dir, filename, sep = ''))
+sgRNA_library <- read_delim(paste(file_dir, filename, sep = ''))
 sgRNA_and_sequence_column <- function_detect_gene_and_sequence_col(sgRNA_library, hgnc_gene)
 MAGeCK_format_sgRNA_library <- function_reformat_sgrna_library(sgRNA_library, sgRNA_and_sequence_column)
-MAGeCK_format_sgRNA_library <- MAGeCK_format_sgRNA_library %>% drop_na()
-function_export_table(MAGeCK_format_sgRNA_library, filename = paste(file_dir, exported_filename, '.tsv', sep = ''))
 
+function_export_table(MAGeCK_format_sgRNA_library, filename = paste(file_dir, exported_filename, '.tsv', sep = ''))
 
 ```
 
@@ -125,7 +124,7 @@ for (file in dir(path = crispr_library_dir)) {
     sgRNA_library <- read_tsv(paste(crispr_library_dir, file, sep = ''))
     sgRNA_and_sequence_column <- function_detect_gene_and_sequence_col(sgRNA_library, hgnc_gene)
     MAGeCK_format_sgRNA_library <- function_reformat_sgrna_library(sgRNA_library, sgRNA_and_sequence_column)
-    MAGeCK_format_sgRNA_library <- MAGeCK_format_sgRNA_library %>% drop_na()
+
     function_export_table(MAGeCK_format_sgRNA_library, filename = paste(crispr_library_dir, exported_filename, '.tsv', sep = ''))
 
   } else if (grepl("\\.csv$", file)) {
@@ -134,7 +133,7 @@ for (file in dir(path = crispr_library_dir)) {
     sgRNA_library <- read_csv(paste(crispr_library_dir, file, sep = ''))
     sgRNA_and_sequence_column <- function_detect_gene_and_sequence_col(sgRNA_library, hgnc_gene)
     MAGeCK_format_sgRNA_library <- function_reformat_sgrna_library(sgRNA_library, sgRNA_and_sequence_column)
-    MAGeCK_format_sgRNA_library <- MAGeCK_format_sgRNA_library %>% drop_na()
+
     function_export_table(MAGeCK_format_sgRNA_library, filename = paste(crispr_library_dir, exported_filename, '.tsv', sep = ''))
   
   } else if (grepl("\\.xlsx$", file)) {
@@ -143,7 +142,7 @@ for (file in dir(path = crispr_library_dir)) {
     sgRNA_library <- read_excel(paste(crispr_library_dir, file, sep = ''))
     sgRNA_and_sequence_column <- function_detect_gene_and_sequence_col(sgRNA_library, hgnc_gene)
     MAGeCK_format_sgRNA_library <- function_reformat_sgrna_library(sgRNA_library, sgRNA_and_sequence_column)
-    MAGeCK_format_sgRNA_library <- MAGeCK_format_sgRNA_library %>% drop_na()
+
     function_export_table(MAGeCK_format_sgRNA_library, filename = paste(crispr_library_dir, exported_filename, '.tsv', sep = ''))
   }
 

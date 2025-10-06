@@ -4,10 +4,9 @@ library(readxl)
 setwd(getwd())
 ```
 
-## Data processing for Avana library by Fortin et al, 2019
+## Take control sgRNA Avana library from Doench et al, 2016
 
 ```{r}
-
 # Define the Excel file path
 excel_file <- "./STable_02_AvanaLibrary.xlsx"
 
@@ -21,16 +20,17 @@ sheet_list <- lapply(sheet_names, function(sheet) {
 
 # Combine all data frames into one
 all_data <- bind_rows(sheet_list, .id = "sheet_name")
-all_data <- all_data %>%
+control_avana <- all_data %>%
   select(-sheet_name) %>%
   distinct() %>%
   arrange(desc(str_detect(`Annotated Gene Symbol`, "NO_CURRENT")), `Annotated Gene Symbol`) %>%
-  filter(!str_detect(`Annotated Gene Symbol`, "NO_CURRENT"))
+  filter(str_detect(`Annotated Gene Symbol`, "NO_CURRENT")) %>%
+  dplyr::rename("spacer" = "Barcode Sequence",
+                "gene" = "Annotated Gene Symbol") %>%
+  select(spacer, gene)
 
-# Export to csv file
-write_csv(all_data, "STable_02_AvanaLibrary.csv")
+
 ```
-
 
 ## Data processing of Avana Library by Meyers et al, 2017
 
@@ -38,14 +38,56 @@ write_csv(all_data, "STable_02_AvanaLibrary.csv")
 
 # define text file input
 
-data <- read_tsv('./avana_library.tsv', col_names = FALSE)
-colnames(data) <- c('sgrna', 'spacer', 'gene')
+avana_meyers <- read_tsv('./avana_library.txt', col_names = TRUE)
+colnames(avana_meyers) <- c('spacer', 'locus', 'gene')
 
-length(unique(data$gene))
+test <- avana_meyers %>% left_join(control_avana, join_by(spacer))
 
-data <- data %>%
-  drop_na()
+intersect(avana_meyers$spacer, control_avana$spacer)
 
 ```
 
+## Data processing AvanaGuideMap from DepMap portal
+
+```{r}
+
+# read avana library and select only guides without DropReason (NA) and with no alignments (control)
+avana_guidemap <- read_csv("AvanaGuideMap.csv") %>%
+  filter(DropReason %in% c(NA, "no alignments")) %>%
+  dplyr::rename("spacer" = "sgRNA",
+                "gene" = "Gene") %>%
+  arrange(gene)
+
+# separate control guides with no genome alignment (1083 guides)
+avana_guidemap_control <- avana_guidemap %>%
+  filter(is.na(GenomeAlignment))
+
+# clean the original avana library to match the pipeline input
+avana_guidemap <- avana_guidemap %>% 
+  filter(!is.na(GenomeAlignment) & is.na(DropReason)) %>%
+  mutate(gene = str_replace(gene, "\\s*\\(\\d+\\)", ""))
+
+run_length <- rle(avana_guidemap$gene)$lengths
+sequential_number <- sequence(run_length)
+
+avana_guidemap <- avana_guidemap %>%
+  mutate(sgRNA = paste("sg", gene, "_", sequential_number, sep = "")) %>%
+  relocate(sgRNA, .before = spacer) %>%
+  select(sgRNA, spacer, gene)
+
+# process the control sgRNA in avana
+sequential_number <- seq(1, length(avana_guidemap_control$spacer))
+
+avana_guidemap_control <- avana_guidemap_control %>%
+  mutate(sgRNA = paste("sgNon-targeting-control_", sequential_number, sep = ""),
+         gene = "Non-targeting-control") %>%
+  relocate(sgRNA, .before = spacer) %>%
+  select(sgRNA, spacer, gene)
+  
+avana_library <- rbind(avana_guidemap_control, avana_guidemap)
+
+write_tsv(avana_library, "AvanaGuideMap.tsv", col_names = FALSE)
+
+
+```
 

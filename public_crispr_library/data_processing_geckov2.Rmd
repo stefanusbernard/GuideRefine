@@ -1,0 +1,38 @@
+---
+title: "data_processing_geckov2"
+author: "Stefanus Bernard"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(readxl)
+setwd(getwd())
+```
+
+```{r}
+gecko_lib_a <- read_tsv("./human_geckov2_library_a_09mar2015.tsv", col_names = c("sgRNA", "spacer", "gene"))
+gecko_lib_b <- read_tsv("./human_geckov2_library_b_09mar2015.tsv", col_names = c("sgRNA", "spacer", "gene"))
+
+gecko <- rbind(gecko_lib_a, gecko_lib_b)
+
+gecko <- gecko %>% 
+  select(-sgRNA) %>%
+  arrange(gene)
+
+
+run_length <- rle(gecko$gene)$lengths
+sequential_number <- sequence(run_length)
+
+gecko <- gecko %>%
+  mutate(sgRNA = paste("sg", gene, "_", sequential_number, sep = "")) %>%
+  relocate(sgRNA, .before = spacer) %>%
+  distinct() %>%
+  drop_na()
+
+write_tsv(gecko, "./human_geckov2_library_combined_09mar2015.tsv", col_names = FALSE)
+
+
+```
+
