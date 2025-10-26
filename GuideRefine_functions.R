@@ -230,64 +230,95 @@ find_overlaps_gene_annotation_and_alignment <- function(guide_aln_granges, gene_
 
 }
 
-# function to detect any previous/alias symbol based on the alignment and correct it
-process_gene_symbol <- function(gene_df) {
-  # Helper: Remove duplicated spacers per gene
-  remove_duplicate_spacers <- function(df) {
-    df %>%
-      arrange(gene, sgrna) %>%
-      group_by(gene) %>%
-      filter(!duplicated(spacer)) %>%
-      ungroup()
-  }
+
+# function to visualize the gene symbols 
+
+visualize_gene_symbol <- function(gene_df) {
   
-  # Step 1: Extract symbol from sgRNA and tag notes
-  gene_df_check <- gene_df %>%
+  gene_df %>%
     filter(mismatches == 0) %>%
-    mutate(extracted_symbol = str_extract(sgrna, "(?<=sg)([A-Za-z0-9-]+)"),
-           notes = if_else(extracted_symbol == gene, "symbol match", "symbol mismatch")) %>%
-    select(-extracted_symbol)
+    mutate(notes = case_when(str_extract(sgrna, "(?<=sg)([A-Za-z0-9-]+)") == gene ~ "symbol match",
+                             str_extract(sgrna, "(?<=sg)([A-Za-z0-9-]+)") != gene ~ "symbol mismatch")) %>%
+    select(gene, notes) %>%
+    distinct() %>%
+    count(notes) %>%
+    dplyr::rename("how_many" = "n") %>%
+    ggplot(aes(notes, how_many, fill = notes)) +
+    geom_bar(stat = "identity") +
+    theme_minimal() +
+    labs(title = paste("Validation of sgRNA alignment with exon and gene symbol annotation"),
+         x = "",
+         y = "Number of genes") +
+    theme(axis.text.x = element_text(size = 12, colour = "black"),
+          axis.text.y = element_text(size = 12, colour = "black"),
+          axis.title.y = element_text(size = 14, colour = "black")) +
+    geom_text(aes(label = how_many), vjust=-0.5) +
+    scale_x_discrete(labels=c("symbol match" = "gene symbol match \nwith exon annotation",
+                              "symbol mismatch" = "gene symbol not match \nwith exon annotation")) +
+    scale_fill_manual(
+      values = c("symbol match" = "#1f77b4", 
+                 "symbol mismatch" = "#ff7f0e")) +
+    ylim(0, length(unique(gene_df$gene))+1000)
   
-  # Step 2: Separate and clean matched and mismatched groups
-  gene_df_match <- gene_df_check %>%
-    filter(notes == "symbol match") %>%
-    remove_duplicate_spacers()
-  
-  gene_df_mismatch <- gene_df_check %>%
-    filter(notes == "symbol mismatch") %>%
-    remove_duplicate_spacers()
-  
-  # Step 3: Re-assign IDs for mismatched (corrected) sgRNAs
-  gene_df_mismatch <- gene_df_mismatch %>%
-    group_by(gene) %>%
-    mutate(sgrna = paste0("sg", gene, "_", row_number(), "_SC")) %>%
-    ungroup() %>%
-    relocate(sgrna, .before = spacer) %>%
-    mutate(notes = "symbol corrected")
-  
-  # Step 4: Identify problematic genes (appear in both sets)
-  problematic_genes <- intersect(gene_df_match$gene, gene_df_mismatch$gene)
-  
-  corrected_exist_gene <- gene_df_match %>%
-    filter(gene %in% problematic_genes)
-  
-  gene_df_match <- gene_df_match %>%
-    filter(!gene %in% problematic_genes)
-  
-  # Step 5: Combine corrected and existing, mark duplicates
-  gene_df_mismatch <- bind_rows(gene_df_mismatch, corrected_exist_gene) %>%
-    arrange(gene, desc(notes)) %>%
-    group_by(gene) %>%
-    mutate(duplicate_spacer_gene = duplicated(spacer)) %>%
-    ungroup()
-  
-  # Step 6: Final corrected dataset
-  gene_df_corrected <- bind_rows(gene_df_match, gene_df_mismatch)
-  
-  return(gene_df_corrected)
 }
 
 
+# function to detect any previous/alias symbol based on the alignment and correct it
+update_gene_symbol <- function(gene_df) {
+  # categorize sgRNA with gene symbol match and sgRNA with gene symbol mismatch
+  gene_df_check <- gene_df %>%
+    filter(mismatches == 0) %>%
+    mutate(notes = case_when(str_extract(sgrna, "(?<=sg)([A-Za-z0-9-]+)") == gene ~ "symbol match",
+                             str_extract(sgrna, "(?<=sg)([A-Za-z0-9-]+)") != gene ~ "symbol mismatch"))
+  
+  # check for duplicate spacer in gene_df_match and discard it (sgRNA targeting the same gene but different exon location)
+  gene_df_match <- gene_df_check %>%
+    filter(notes == "symbol match") %>%
+    mutate(duplicate_spacer_gene = duplicated(spacer, gene)) %>%
+    arrange(sgrna) %>%
+    filter(!duplicate_spacer_gene == TRUE)
+  
+  # separate sgRNA with gene symbol mismatch dataframe, discard duplicated spacer
+  gene_df_mismatch <- gene_df_check %>%
+    filter(notes == "symbol mismatch") %>%
+    mutate(duplicate_spacer_gene = duplicated(spacer, gene)) %>%
+    arrange(gene) %>%
+    filter(!duplicate_spacer_gene == TRUE)
+  
+  # arrange sequential numbers here
+  run_length <- rle(gene_df_mismatch$gene)$lengths
+  sequential_numbers <- sequence(run_length)
+  
+  # correct sgRNA - gene name according to the alignment exon location and add new sgRNA number id alongside _SC (corrected gene symbol)
+  gene_df_mismatch <- gene_df_mismatch %>%
+    mutate(new_sgrna_id = paste("sg", gene, "_", sequential_numbers, "_SC" , sep ="")) %>%
+    select(-sgrna) %>%
+    dplyr::rename("sgrna" = "new_sgrna_id") %>%
+    relocate(sgrna, .before = spacer) %>%
+    mutate(notes = "symbol corrected")
+  
+  # find corrected genes that already exist in gene_df_match put it into a new dataframe called as corrected_exist_gene
+  list_corrected_exist_gene <- intersect(gene_df_match$gene, gene_df_mismatch$gene)
+  corrected_exist_gene <- gene_df_match %>%
+    filter(gene %in% list_corrected_exist_gene)
+  
+  # filter out problematic gene (gene that originally targeted by sgRNA in the library, but also targeted by another sgRNA with corrected symbol)
+  gene_df_match <- gene_df_match %>%
+    filter(!gene %in% list_corrected_exist_gene)
+  
+  # join gene_df_mismatch with gene_df_match to find the duplicated sgRNA
+  gene_df_mismatch <- gene_df_mismatch %>%
+    full_join(corrected_exist_gene) %>%
+    arrange(gene, desc(notes)) %>%
+    mutate(duplicate_spacer_gene = duplicated(spacer, gene))
+  
+  # full_join the gene_df_mismatch with gene_df_match to become a gene_df_corrected
+  gene_df_corrected <- gene_df_match %>%
+    full_join(gene_df_mismatch)
+  
+  return(list("gene_symbol_check" = gene_df_check, 
+              "gene_symbol_corrected" = gene_df_corrected))
+}
 
 #### TEMPORARY FUNCTION
 

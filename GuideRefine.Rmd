@@ -43,7 +43,7 @@ The current HGNC dataset were retrieved from https://storage.googleapis.com/publ
 ```{r install required packages, include = FALSE}
 
 setwd(getwd())
-source("sgRNA_library_refinement_pipeline_functions.R")
+source("GuideRefine_functions.R")
 
 list_packages_bioconductor <- c("crisprBase",
                                 "crisprBowtie",
@@ -93,7 +93,11 @@ library(xlsx)
 file_dir_location <- "./public_crispr_library/"
 
 # name of sgRNA library (without file format)
-sgRNA_library_selected <- "human_geckov2_library_combined_09mar2015"
+sgRNA_library_selected <- "Jacquere_PerGuideAnnotations_Quota4"
+
+# detect any control/intron control sgRNA from your library
+terms <- c("CONTROL", "Control", "control", "INTRON", "Intron", "intron", "NO_SITE", "ONE_SITE_INTERGENIC")
+terms_for_filtering <- paste(terms, collapse = "|")
 
 # change your reference genome here
 ref_bsgenome_selected <- BSgenome.Hsapiens.NCBI.T2TCHM13v2.0
@@ -117,7 +121,6 @@ name_prefix_for_index <- "T2T-CHM13_BSgenome"
 # check_index_file = "hg38.1.ebwt"
 # bowtie_index_dir <- "bowtie_index/hg38/"
 # name_prefix_for_index <- "hg38"
-
 
 paste("sgRNA library name:", sgRNA_library_selected)
 paste("CCDS or .RDS file:", ccds_filename_dir)
@@ -323,10 +326,6 @@ track_table <- function_df_count(track_table,
 
 ```{r Separate control or intron control sgRNA with the rest of sgRNA, include = FALSE}
 
-# detect any control/intron control sgRNA
-terms <- c("CONTROL", "Control", "control", "INTRON", "Intron", "intron")
-terms_for_filtering <- paste(terms, collapse = "|")
-
 # separate control sgRNA from the rest of sgRNA
 sgRNA_library_control <- library_alignment %>%
   filter(str_detect(gene, terms_for_filtering)) %>%
@@ -412,25 +411,7 @@ gene_df <- find_overlaps_gene_annotation_and_alignment(guide_aln_granges = guide
 
 ```{r Validation of gene symbol for the alignment and annotation data - Strictly pick 0 mismatch alignment, echo = FALSE}
 
-gene_df %>%
-  filter(mismatches == 0) %>%
-  mutate(notes = case_when(str_extract(sgrna, "(?<=sg)([A-Za-z0-9-]+)") == gene ~ "symbol match",
-                           str_extract(sgrna, "(?<=sg)([A-Za-z0-9-]+)") != gene ~ "symbol mismatch")) %>%
-  select(gene, notes) %>%
-  distinct() %>%
-  count(notes) %>%
-  dplyr::rename("how_many" = "n") %>%
-  ggplot(aes(notes, how_many)) +
-    geom_histogram(stat = "identity") +
-    labs(
-      title = paste("Validation of sgRNA alignment with exon and gene symbol annotation"),
-      x = "",
-      y = "Number of genes"
-    ) +
-    geom_text(aes(label = how_many), vjust=-0.5) +
-    scale_x_discrete(labels=c("symbol match" = "gene symbol match with exon annotation",
-                              "symbol mismatch" = "gene symbol not match \nwith exon annotation")) +
-    theme_light()
+visualize_gene_symbol(gene_df)
 
 ```
 
@@ -438,84 +419,20 @@ gene_df %>%
 
 ```{r Correct the sgRNA according to targeted gene symbol, echo = FALSE}
 
-# categorize sgRNA with gene symbol match and sgRNA with gene symbol mismatch
-gene_df_check <- gene_df %>%
-  filter(mismatches == 0) %>%
-  mutate(notes = case_when(str_extract(sgrna, "(?<=sg)([A-Za-z0-9-]+)") == gene ~ "symbol match",
-                           str_extract(sgrna, "(?<=sg)([A-Za-z0-9-]+)") != gene ~ "symbol mismatch"))
+source("GuideRefine_functions.R")
 
-# check for duplicate spacer in gene_df_match and discard it (sgRNA targeting the same gene but different exon location)
-gene_df_match <- gene_df_check %>%
-  filter(notes == "symbol match") %>%
-  mutate(duplicate_spacer_gene = duplicated(spacer, gene)) %>%
-  arrange(sgrna) %>%
-  filter(!duplicate_spacer_gene == TRUE)
-
-# separate sgRNA with gene symbol mismatch dataframe, discard duplicated spacer
-gene_df_mismatch <- gene_df_check %>%
-  filter(notes == "symbol mismatch") %>%
-  mutate(duplicate_spacer_gene = duplicated(spacer, gene)) %>%
-  arrange(gene) %>%
-  filter(!duplicate_spacer_gene == TRUE)
-
-# arrange sequential numbers here
-run_length <- rle(gene_df_mismatch$gene)$lengths
-sequential_numbers <- sequence(run_length)
-
-# correct sgRNA - gene name according to the alignment exon location and add new sgRNA number id alongside _SC (corrected gene symbol)
-gene_df_mismatch <- gene_df_mismatch %>%
-  mutate(new_sgrna_id = paste("sg", gene, "_", sequential_numbers, "_SC" , sep ="")) %>%
-  select(-sgrna) %>%
-  dplyr::rename("sgrna" = "new_sgrna_id") %>%
-  relocate(sgrna, .before = spacer) %>%
-  mutate(notes = "symbol corrected")
-
-# find corrected genes that already exist in gene_df_match put it into a new dataframe called as corrected_exist_gene
-list_corrected_exist_gene <- intersect(gene_df_match$gene, gene_df_mismatch$gene)
-corrected_exist_gene <- gene_df_match %>%
-  filter(gene %in% list_corrected_exist_gene)
-
-# filter out problematic gene (gene that originally targeted by sgRNA in the library, but also targeted by another sgRNA with corrected symbol)
-gene_df_match <- gene_df_match %>%
-  filter(!gene %in% list_corrected_exist_gene)
-
-# join gene_df_mismatch with gene_df_match to find the duplicated sgRNA
-gene_df_mismatch <- gene_df_mismatch %>%
-  full_join(corrected_exist_gene) %>%
-  arrange(gene, desc(notes)) %>%
-  mutate(duplicate_spacer_gene = duplicated(spacer, gene))
-
-# full_join the gene_df_mismatch with gene_df_match to become a gene_df_corrected
-gene_df_corrected <- gene_df_match %>%
-  full_join(gene_df_mismatch)
+# update gene symbol based on the sgRNA alignment location to exon
+gene_df_corrected <- update_gene_symbol(gene_df)
 
 # Histogram of corrected gene symbol
-gene_df_corrected %>%
-  filter(mismatches == 0) %>%
-  mutate(notes = case_when(str_extract(sgrna, "(?<=sg)([A-Za-z0-9-]+)") == gene ~ "symbol match",
-                           str_extract(sgrna, "(?<=sg)([A-Za-z0-9-]+)") != gene ~ "symbol mismatch")) %>%
-  select(gene, notes) %>%
-  distinct() %>%
-  count(notes) %>%
-  dplyr::rename("how_many" = "n") %>%
-  ggplot(aes(notes, how_many)) +
-    geom_histogram(stat = "identity") +
-    labs(
-      title = paste("Validation of sgRNA alignment with exon and gene symbol annotation"),
-      x = "",
-      y = "Number of genes"
-    ) +
-    geom_text(aes(label = how_many), vjust=-0.5) +
-    scale_x_discrete(labels=c("symbol match" = "gene symbol match with exon annotation",
-                              "symbol mismatch" = "gene symbol not match \nwith exon annotation")) +
-    theme_light()
+visualize_gene_symbol(gene_df_corrected[["gene_symbol_corrected"]])
 
 ```
 
 ```{r Find genes lost after annotation, include = FALSE}
 
 # gene_track_annotation : a dataframe of the old and approved gene symbol
-gene_track_annotation <- gene_df_check %>%
+gene_track_annotation <- gene_df_corrected[["gene_symbol_check"]] %>%
   filter(notes == "symbol mismatch") %>%
   select(sgrna, gene, notes) %>%
   mutate(old_gene = str_extract(sgrna, "(?<=sg)([A-Za-z0-9-]+)")) %>%
@@ -547,7 +464,7 @@ gene_original_corrected <- as.character(gene_original_corrected)
 paste("Corrected gene name: ")
 setdiff(gene_original_corrected, gene_original)
 
-exclude_control <- c(unique(gene_df_corrected$gene), detected_control_sgrna)
+exclude_control <- c(unique(gene_df_corrected[["gene_symbol_corrected"]]$gene), detected_control_sgrna)
 
 genes_lost_after_annotation <- setdiff(gene_original_corrected, exclude_control)
 gene_original_corrected <- setdiff(gene_original_corrected, genes_lost_after_annotation)
@@ -566,17 +483,17 @@ print(paste("number of genes lost following the annotation: ", length(genes_lost
 
 ```{r, include = FALSE}
 track_table <- function_df_count(track_table,
-                                 count_sgrna = length(unique(gene_df_corrected$sgrna)),
-                                 num_genes = length(unique(gene_df_corrected$gene)),
-                                 num_alignments = length(gene_df_corrected$sgrna),
-                                 notes = paste(length(unique(gene_df_corrected$sgrna)), " sgRNA targeting exon only"))
+                                 count_sgrna = length(unique(gene_df_corrected[["gene_symbol_corrected"]]$sgrna)),
+                                 num_genes = length(unique(gene_df_corrected[["gene_symbol_corrected"]]$gene)),
+                                 num_alignments = length(gene_df_corrected[["gene_symbol_corrected"]]$sgrna),
+                                 notes = paste(length(unique(gene_df_corrected[["gene_symbol_corrected"]]$sgrna)), " sgRNA targeting exon only"))
 ```
 
 ## Filter only sgRNAs targeting exons of protein-coding genes
 
 ```{r Find sgRNAs failed to target exon, include = FALSE}
 
-list_sgRNA_not_target_exon <- setdiff(unique(library_alignment$sgRNA), unique(gene_df_corrected$sgrna))
+list_sgRNA_not_target_exon <- setdiff(unique(library_alignment$sgRNA), unique(gene_df_corrected[["gene_symbol_corrected"]]$sgrna))
 
 sgRNA_not_target_exon <- library_alignment %>%
   select(sgRNA, gene) %>%
@@ -596,7 +513,7 @@ hgnc_selected <- hgnc %>%
   select(symbol, name, locus_group, locus_type) %>%
   dplyr::rename("gene" = "symbol")
 
-sgRNA_library_gene_df <- gene_df_corrected %>%
+sgRNA_library_gene_df <- gene_df_corrected[["gene_symbol_corrected"]] %>%
   left_join(hgnc_selected, by = "gene")
 
 paste("count sgRNAs: ", length(unique(sgRNA_library_gene_df$sgrna)))
@@ -639,7 +556,6 @@ sgRNAs might target:
 ```{r Selected only protein-coding genes, echo = FALSE}
 
 print(paste("number of non protein-coding genes: ", length(genes_not_pcg), sep = ""))
-# print(genes_not_pcg)
 
 ```
 
@@ -718,7 +634,7 @@ track_table <- function_df_count(track_table,
                                  count_sgrna = length(unique(sgRNA_library_refined$sgRNA)),
                                  num_genes = length(unique(sgRNA_library_refined$gene)),
                                  num_alignments = "-",
-                                 notes = paste(length(unique(guides_below_3$gene)), " genes targeted by < 3 sgRNAs"))
+                                 notes = paste(length(unique(guides_below_3$gene)), " genes removed (fewer than 3 sgRNAs)"))
 
 colnames(track_table) <- c("count_sgrna", "num_genes", "num_alignments", "notes")
 kable(track_table)
@@ -795,7 +711,6 @@ list_discarded_sgrna <- data.frame(
   single_mismatch_guides = pad(result_single_mismatch_sgrna$list_guides, max_len),
   pam_distal_double_mismatch_guides = pad(result_pam_distal_double_mismatch$list_guides, max_len),
   guides_not_target_anywhere = pad(sgRNA_not_target_anywhere$`sgRNA not target anywhere`, max_len),
-  # guides_not_target_exon = pad(list_sgRNA_not_target_exon, max_len),
   stringsAsFactors = FALSE
 )
 
@@ -825,7 +740,7 @@ write_tsv(list_discarded_sgrna,
 
 write.xlsx(total_sgRNA_or_gene, file = paste("./output_cleaning/", sgRNA_library_selected, "_full_report.xlsx", sep = ""), row.names = FALSE, sheetName = "Genes Report", append = TRUE)
 
-write.xlsx(track_table, file = paste("./output_cleaning/", sgRNA_library_selected, "_full_report.xlsx", sep = ""), row.names = FALSE, sheetName = "Refining Process Tracker", append = TRUE)a
+write.xlsx(track_table, file = paste("./output_cleaning/", sgRNA_library_selected, "_full_report.xlsx", sep = ""), row.names = FALSE, sheetName = "Refining Process Tracker", append = TRUE)
 
 ```
 
