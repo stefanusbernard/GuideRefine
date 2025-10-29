@@ -1,5 +1,5 @@
 ---
-title: "GuideRefine: a tool to remove multi-target-/off-target sgRNAs from CRISPR-Cas9 KO screens libraries"
+title: "GuideRefine: a tool to remove multi-target-/off-target sgRNAs from genome-wide CRISPR-KO screen libraries"
 author: "Author: Stefanus Bernard"
 date: "Date: `r format(Sys.time(), '%d %B %Y')`"
 output: 
@@ -9,6 +9,27 @@ output:
       toc_float: true
       number_sections: true
       self_contained: true
+      
+params:
+  output_filename: "output.html"
+  # library directory and control guides name
+  library_dir: "./public_crispr_library/"
+  sgrna_library: "Jacquere_PerGuideAnnotations_Quota4"
+  terms: ["CONTROL", "Control", "control", "INTRON", "Intron", "intron", "NO_SITE", "ONE_SITE_INTERGENIC"]
+  # reference genome and hgnc annotation
+  ref_bsgenome: "BSgenome.Hsapiens.NCBI.T2TCHM13v2.0"
+  ccds_filename_dir: "annotation_file/T2T-CHM13v2.0_gene_annot_granges.rds"
+  hgnc_link: "https://storage.googleapis.com/public-download-files/hgnc/tsv/tsv/hgnc_complete_set.txt"
+  # alignment file location and criteria
+  guide_aln_granges_genome: "T2T-CHM13v2.0"
+  aln_file_dir: "./object_intermediate/T2T-CHM13_bsgenome/"
+  check_index_file: "T2T-CHM13_BSgenome.1.ebwt"
+  bowtie_index_dir: "bowtie_index/T2T-CHM13_bsgenome/"
+  name_prefix_for_index: "T2T-CHM13_BSgenome"
+  remove_all_single_mismatch: TRUE
+  # output location
+  output_dir: "./output_cleaning/"
+  
 ---
 
 # Input data and Methods
@@ -29,14 +50,15 @@ The current HGNC dataset were retrieved from https://storage.googleapis.com/publ
 4.  Alignment of sgRNA to HG38 UCSC using Bowtie2 (2 mismatches)
 5.  Post alignment data processing
 6.  Find and drop multi-target sgRNAs
-7.  Find and drop single mismatch sgRNAs
-8.  Find and drop sgRNA align with double mismatches at the PAM distal nucleotides
-9.  CCDS annotation of sgRNA library
-10. HGNC annotation of sgRNA library
-11. Clean sgRNA library
-12. Discard any genes targeted by less than 3 sgRNAs
-13. Calculate how many sgRNAs or genes lost
-14. Export the refined sgRNA library TSV file and excel file report
+7.  Find and drop single mismatch sgRNAs (optional)
+8.  Find and drop sgRNA align with single mismatch at the PAM-distal
+9.  Find and drop sgRNA align with double mismatch at the PAM-distal
+10. CCDS annotation of sgRNA library
+11. HGNC annotation of sgRNA library
+12. Clean sgRNA library
+13. Discard any genes targeted by less than 3 sgRNAs
+14. Calculate how many sgRNAs or genes lost
+15. Export the refined sgRNA library TSV file and excel file report
 
 # Pipeline
 
@@ -48,11 +70,11 @@ list_packages_bioconductor <- c("crisprBase",
                                 "BSgenome.Hsapiens.NCBI.T2T.CHM13v2.0",
                                 "GenomicRanges")
 
-for (i in list_packages_bioconductor) {
-  BiocManager::install(i)
-  
+for (pkg in list_packages_bioconductor) {
+  if (!requireNamespace(pkg, quietly = TRUE)) {
+    BiocManager::install(pkg, ask = FALSE, update = TRUE)
+  }
 }
-
 
 list_packages <- c("hgnc",
                    "stringr",
@@ -73,8 +95,7 @@ source("GuideRefine_functions.R")
 library(crisprBase)
 library(crisprBowtie)
 library(GenomeInfoDb)
-library(BSgenome.Hsapiens.UCSC.hg38)
-library(BSgenome.Hsapiens.NCBI.T2TCHM13v2.0)
+library(params$ref_bsgenome, character.only = TRUE)
 library(GenomicRanges)
 library(hgnc)
 library(stringr)
@@ -87,43 +108,39 @@ library(xlsx)
 
 ## Parameters for the pipeline
 
-```{r User defined variable (User input/Hardcoded), echo = FALSE}
+```{r User defined variable (Input in params), echo = FALSE}
 
 # main sgRNA library file location
-file_dir_location <- "./public_crispr_library/"
+file_dir_location <- params$library_dir
 
 # name of sgRNA library (without file format)
-sgRNA_library_selected <- "Jacquere_PerGuideAnnotations_Quota4"
+sgRNA_library_selected <- params$sgrna_library
 
 # detect any control/intron control sgRNA from your library
-terms <- c("CONTROL", "Control", "control", "INTRON", "Intron", "intron", "NO_SITE", "ONE_SITE_INTERGENIC")
+terms <- params$terms
 terms_for_filtering <- paste(terms, collapse = "|")
 
 # change your reference genome here
-ref_bsgenome_selected <- BSgenome.Hsapiens.NCBI.T2TCHM13v2.0
+ref_bsgenome_selected <- get(params$ref_bsgenome)
 
 # directory for NCBI CCDS data or .RDS file processed from T2T_gff_to_ccds_conversion.Rmd
-ccds_filename_dir <- "annotation_file/T2T-CHM13v2.0_gene_annot_granges.rds"
+ccds_filename_dir <- params$ccds_filename_dir
 
 # guide align granges genome (hg38 or T2T-CHM13v2.0)
-guide_aln_granges_genome <- "T2T-CHM13v2.0"
+guide_aln_granges_genome <- params$guide_aln_granges_genome
 
 # name output for sgRNA library alignment (.CSV file)
-aln_file_dir <- "./object_intermediate/T2T-CHM13_bsgenome/"
+aln_file_dir <- params$aln_file_dir
 aln_2_mismatch_filename <- paste(sgRNA_library_selected, "_aln.csv", sep ="")
 
-# Bowtie alignment indexing for T2T reference genome
-check_index_file = "T2T-CHM13_BSgenome.1.ebwt"
-bowtie_index_dir <- "bowtie_index/T2T-CHM13_bsgenome/"
-name_prefix_for_index <- "T2T-CHM13_BSgenome"
+# Bowtie alignment indexing
+check_index_file <- params$check_index_file
+bowtie_index_dir <- params$bowtie_index_dir
+name_prefix_for_index <- params$name_prefix_for_index
 
-# Bowtie alignment indexing for hg38 reference genome
-# check_index_file = "hg38.1.ebwt"
-# bowtie_index_dir <- "bowtie_index/hg38/"
-# name_prefix_for_index <- "hg38"
 
 # alignment criteria
-remove_all_single_mismatch <- "NO"
+remove_all_single_mismatch <- params$remove_all_single_mismatch
 
 paste("sgRNA library name:", sgRNA_library_selected)
 paste("CCDS or .RDS file:", ccds_filename_dir)
@@ -132,7 +149,6 @@ paste("Genome version:", unique(genome(ref_bsgenome_selected)))
 ```
 
 ```{r Create folder and import library cellecta, include = FALSE}
-dir.create("output_cleaning")
 dir.create("object_intermediate")
 sgRNA_library <- read_tsv(paste(file_dir_location, sgRNA_library_selected, ".tsv", sep = ""), col_names = FALSE)
 colnames(sgRNA_library) <- c("sgRNA", "spacer", "gene")
@@ -272,7 +288,7 @@ track_table <- function_df_count(track_table,
 
 ```{r Find sgRNA aligned with single mismatch (optional), include = FALSE}
 
-if(remove_all_single_mismatch == "YES") {
+if(remove_all_single_mismatch == TRUE) {
   
   # detect any single mismatch sgRNA
   result_single_mismatch_sgrna <- single_mismatch_sgrna(library_alignment)
@@ -300,7 +316,7 @@ if(remove_all_single_mismatch == "YES") {
 
 ```{Report of single mismatch sgRNAs, echo = FALSE}
 
-if (remove_all_single_mismatch == "YES") {
+if (remove_all_single_mismatch == TRUE) {
   # number of genes lost due to single mismatch sgRNAs
   print(paste("Number of single mismatch sgRNAs: ", length(result_single_mismatch_sgrna$list_guides), sep = ""))
   print(paste("Number of genes lost due to single mismatch sgRNAs: ", length(genes_lost_single_mismatch_sgrna), sep = ""))
@@ -461,8 +477,6 @@ visualize_gene_symbol(gene_df)
 
 ```{r Correct the sgRNA according to targeted gene symbol, echo = FALSE}
 
-source("GuideRefine_functions.R")
-
 # update gene symbol based on the sgRNA alignment location to exon
 gene_df_corrected <- update_gene_symbol(gene_df)
 
@@ -547,7 +561,11 @@ sgRNA_not_target_exon <- library_alignment %>%
 
 ```{r Add HGNC annotation of sgRNA library, include = FALSE}
 
-hgnc <- read_tsv(url("https://storage.googleapis.com/public-download-files/hgnc/tsv/tsv/hgnc_complete_set.txt"))
+tmp_file <- tempfile(fileext = ".tsv")
+download.file(params$hgnc_link, tmp_file, mode = "wb")  # always works
+
+hgnc <- read_tsv(params$hgnc_link)
+unlink(tmp_file)
 
 hgnc_selected <- hgnc %>%
   select(symbol, name, locus_group, locus_type) %>%
@@ -556,8 +574,8 @@ hgnc_selected <- hgnc %>%
 sgRNA_library_gene_df <- gene_df_corrected[["gene_symbol_corrected"]] %>%
   left_join(hgnc_selected, by = "gene")
 
-paste("count sgRNAs: ", length(unique(sgRNA_library_gene_df$sgrna)))
-paste("alignments left after data joining with hgnc:", length(sgRNA_library_gene_df$sgrna))
+print(paste("count sgRNAs: ", length(unique(sgRNA_library_gene_df$sgrna))))
+print(paste("alignments left after data joining with hgnc:", length(sgRNA_library_gene_df$sgrna)))
 
 ```
 
@@ -566,8 +584,8 @@ paste("alignments left after data joining with hgnc:", length(sgRNA_library_gene
 sgRNA_library_gene_df_annot <- sgRNA_library_gene_df %>%
   filter(locus_group == "protein-coding gene")
 
-paste("count sgRNAs: ", length(unique(sgRNA_library_gene_df_annot$sgrna)))
-paste("alignments left after data selection of protein-coding gene only:", length(sgRNA_library_gene_df_annot$sgrna))
+print(paste("count sgRNAs: ", length(unique(sgRNA_library_gene_df_annot$sgrna))))
+print(paste("alignments left after data selection of protein-coding gene only:", length(sgRNA_library_gene_df_annot$sgrna)))
 
 ```
 
@@ -576,7 +594,7 @@ paste("alignments left after data selection of protein-coding gene only:", lengt
 exclude_control_2 = c(unique(sgRNA_library_gene_df_annot$gene), detected_control_sgrna)
 genes_not_pcg <- setdiff(sgRNA_library_gene_df$gene, exclude_control_2)
 
-genes_not_pcg_df <- sgRNA_library_gene_df %>%#
+genes_not_pcg_df <- sgRNA_library_gene_df %>%
   filter(gene %in% genes_not_pcg)
   
 ```
@@ -681,7 +699,7 @@ total_sgRNA_or_gene_lost <- data.frame("gene" = sgRNA_library$gene) %>%
   
   {
     tmp <- .
-    if (remove_all_single_mismatch == "YES") {
+    if (remove_all_single_mismatch == TRUE) {
       tmp <- tmp %>%
         left_join(result_single_mismatch_sgrna$dropped_genes_num, by = "gene") %>%
         mutate(`single mismatch sgRNA` = replace_na(`single mismatch sgRNA`, 0))
@@ -704,7 +722,7 @@ total_sgRNA_or_gene_lost <- data.frame("gene" = sgRNA_library$gene) %>%
   replace(is.na(.), 0) %>%
   {
     tmp <- .
-    if (remove_all_single_mismatch == "YES") {
+    if (remove_all_single_mismatch == TRUE) {
       tmp <- tmp %>%
          mutate(`counted total sgRNA` = abs(`sgRNA number` - (`multi-target sgRNA` + 
                                                               `single mismatch sgRNA` + 
@@ -754,7 +772,7 @@ total_sgRNA_or_gene <- total_sgRNA_or_gene_lost %>%
 
 ```{r Create a dataframe what sgRNA lost during each process, include = FALSE}
 
-if (remove_all_single_mismatch == "YES") {
+if (remove_all_single_mismatch == TRUE) {
   max_len <- max(length(result_multi_target_sgrna$list_guides), 
                  length(result_single_mismatch_sgrna$list_guides), 
                  length(result_pam_distal_mismatch$list_guides_pam_single),
@@ -775,7 +793,7 @@ pad <- function(x, n) {
 }
 
 
-if (remove_all_single_mismatch == "YES") {
+if (remove_all_single_mismatch == TRUE) {
   list_discarded_sgrna <- data.frame(
     multi_target_guides = pad(result_multi_target_sgrna$list_guides, max_len),
     single_mismatch_guides = pad(result_single_mismatch_sgrna$list_guides, max_len),
@@ -810,14 +828,14 @@ kable(head(total_sgRNA_or_gene, 10))
 # Export refined sgRNA library
 value <- paste0(round(length(sgRNA_library_refined$sgRNA) / 1000, digits = 0), "K")
 write_tsv(sgRNA_library_refined, 
-          file = paste("./output_cleaning/", sgRNA_library_selected, "_", value, "_refined.tsv", sep = ""), col_names = FALSE)
+          file = paste(params$output_dir, sgRNA_library_selected, "_", value, "_refined.tsv", sep = ""), col_names = FALSE)
 
 write_tsv(list_discarded_sgrna, 
-          file = paste("./output_cleaning/", sgRNA_library_selected, "_disposed_sgRNAs.tsv", sep = ""), col_names = TRUE)
+          file = paste(params$output_dir, sgRNA_library_selected, "_disposed_sgRNAs.tsv", sep = ""), col_names = TRUE)
 
-write.xlsx(total_sgRNA_or_gene, file = paste("./output_cleaning/", sgRNA_library_selected, "_full_report.xlsx", sep = ""), row.names = FALSE, sheetName = "Genes Report", append = TRUE)
+write.xlsx(total_sgRNA_or_gene, file = paste(params$output_dir, sgRNA_library_selected, "_full_report.xlsx", sep = ""), row.names = FALSE, sheetName = "Genes Report", append = TRUE)
 
-write.xlsx(track_table, file = paste("./output_cleaning/", sgRNA_library_selected, "_full_report.xlsx", sep = ""), row.names = FALSE, sheetName = "Refining Process Tracker", append = TRUE)
+write.xlsx(track_table, file = paste(params$output_dir, sgRNA_library_selected, "_full_report.xlsx", sep = ""), row.names = FALSE, sheetName = "Refining Process Tracker", append = TRUE)
 
 ```
 
