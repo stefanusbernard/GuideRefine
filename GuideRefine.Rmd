@@ -679,9 +679,15 @@ total_sgRNA_or_gene_lost <- data.frame("gene" = sgRNA_library$gene) %>%
   left_join(result_multi_target_sgrna$dropped_genes_num, by = "gene") %>%
   mutate(`multi-target sgRNA` = replace_na(`multi-target sgRNA`, 0)) %>%
   
-  # need to think about result single mismatch sgrna as it can be skipped
-  left_join(result_single_mismatch_sgrna$dropped_genes_num, by = "gene") %>%
-  mutate(`single mismatch sgRNA` = replace_na(`single mismatch sgRNA`, 0)) %>%
+  {
+    tmp <- .
+    if (remove_all_single_mismatch == "YES") {
+      tmp <- tmp %>%
+        left_join(result_single_mismatch_sgrna$dropped_genes_num, by = "gene") %>%
+        mutate(`single mismatch sgRNA` = replace_na(`single mismatch sgRNA`, 0))
+    }
+    tmp
+  } %>%
   
   left_join(result_pam_distal_mismatch$dropped_genes_num_pam_single, by = "gene") %>%
   mutate(`PAM distal single mismatch` = replace_na(`PAM distal single mismatch`, 0)) %>%
@@ -695,12 +701,23 @@ total_sgRNA_or_gene_lost <- data.frame("gene" = sgRNA_library$gene) %>%
   
   full_join(corrected_sgrna_report, by = "gene") %>%
   mutate(`Additional sgRNA (Corrected)` = replace_na(`Additional sgRNA (Corrected)`, 0)) %>%
-  
   replace(is.na(.), 0) %>%
-  
+  {
+    tmp <- .
+    if (remove_all_single_mismatch == "YES") {
+      tmp <- tmp %>%
+         mutate(`counted total sgRNA` = abs(`sgRNA number` - (`multi-target sgRNA` + 
+                                                              `single mismatch sgRNA` + 
+                                                              `PAM distal single mismatch` + 
+                                                              `PAM distal double mismatch` +
+                                                              `sgRNA not target anywhere` + 
+                                                              `sgRNA not target exon`) + 
+                                                              `Additional sgRNA (Corrected)`))
+    }
+    tmp
+  } %>%
   mutate(
     `counted total sgRNA` = abs(`sgRNA number` - (`multi-target sgRNA` + 
-                                                  `single mismatch sgRNA` + 
                                                   `PAM distal single mismatch` + 
                                                   `PAM distal double mismatch` +
                                                   `sgRNA not target anywhere` + 
@@ -737,29 +754,43 @@ total_sgRNA_or_gene <- total_sgRNA_or_gene_lost %>%
 
 ```{r Create a dataframe what sgRNA lost during each process, include = FALSE}
 
-max_len <- max(length(result_multi_target_sgrna$list_guides), 
-               # need to think about single mismatch sgrna
-               length(result_single_mismatch_sgrna$list_guides), 
-               length(result_pam_distal_mismatch$list_guides_pam_single),
-               length(result_pam_distal_mismatch$list_guides_pam_double),
-               length(sgRNA_not_target_anywhere$sgRNA),
-               length(list_sgRNA_not_target_exon))
+if (remove_all_single_mismatch == "YES") {
+  max_len <- max(length(result_multi_target_sgrna$list_guides), 
+                 length(result_single_mismatch_sgrna$list_guides), 
+                 length(result_pam_distal_mismatch$list_guides_pam_single),
+                 length(result_pam_distal_mismatch$list_guides_pam_double),
+                 length(sgRNA_not_target_anywhere$sgRNA),
+                 length(list_sgRNA_not_target_exon))
+} else {
+  max_len <- max(length(result_multi_target_sgrna$list_guides), 
+                 length(result_pam_distal_mismatch$list_guides_pam_single),
+                 length(result_pam_distal_mismatch$list_guides_pam_double),
+                 length(sgRNA_not_target_anywhere$sgRNA),
+                 length(list_sgRNA_not_target_exon))
+}
 
 pad <- function(x, n) {
   length(x) <- n 
   return(x)
 }
 
-list_discarded_sgrna <- data.frame(
-  multi_target_guides = pad(result_multi_target_sgrna$list_guides, max_len),
-  # need to think about single mismatch sgrna
-  single_mismatch_guides = pad(result_single_mismatch_sgrna$list_guides, max_len),
-  pam_distal_single_mismatch_guides = pad(result_pam_distal_mismatch$list_guides_pam_single, max_len),
-  pam_distal_double_mismatch_guides = pad(result_pam_distal_mismatch$list_guides_pam_double, max_len),
-  
-  guides_not_target_anywhere = pad(sgRNA_not_target_anywhere$`sgRNA not target anywhere`, max_len),
-  stringsAsFactors = FALSE
-)
+
+if (remove_all_single_mismatch == "YES") {
+  list_discarded_sgrna <- data.frame(
+    multi_target_guides = pad(result_multi_target_sgrna$list_guides, max_len),
+    single_mismatch_guides = pad(result_single_mismatch_sgrna$list_guides, max_len),
+    pam_distal_single_mismatch_guides = pad(result_pam_distal_mismatch$list_guides_pam_single, max_len),
+    pam_distal_double_mismatch_guides = pad(result_pam_distal_mismatch$list_guides_pam_double, max_len),
+    guides_not_target_anywhere = pad(sgRNA_not_target_anywhere$`sgRNA not target anywhere`, max_len),
+    stringsAsFactors = FALSE)
+} else {
+  list_discarded_sgrna <- data.frame(
+    multi_target_guides = pad(result_multi_target_sgrna$list_guides, max_len),
+    pam_distal_single_mismatch_guides = pad(result_pam_distal_mismatch$list_guides_pam_single, max_len),
+    pam_distal_double_mismatch_guides = pad(result_pam_distal_mismatch$list_guides_pam_double, max_len),
+    guides_not_target_anywhere = pad(sgRNA_not_target_anywhere$`sgRNA not target anywhere`, max_len),
+    stringsAsFactors = FALSE)
+  }
 
 ```
 
@@ -769,8 +800,8 @@ list_discarded_sgrna <- data.frame(
 
 ```{r Snippets of exported file, echo = FALSE}
 
-kable(head(sgRNA_library_refined, 25))
-kable(head(total_sgRNA_or_gene, 25))
+kable(head(sgRNA_library_refined, 10))
+kable(head(total_sgRNA_or_gene, 10))
 
 ```
 

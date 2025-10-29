@@ -140,7 +140,7 @@ pam_distal_mismatch <- function(alignment_data, mismatches){
     
     dropped_due_to_pam_distal_double_mismatch <- pam_distal_double_mismatch_count_dropped_guides_per_gene %>%
       count(gene) %>%
-      dplyr::rename('PAM distal single mismatch' = 'n')
+      dplyr::rename('PAM distal double mismatch' = 'n')
     
     return(list(
         pam_distal_df = detect_pam_distal_mismatches,
