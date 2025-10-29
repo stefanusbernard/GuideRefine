@@ -267,7 +267,7 @@ gene_original <- setdiff(gene_original, genes_lost_multi_target_sgrna)
 
 ```
 
-```{Report of multi-target sgRNAs, echo = FALSE}
+```{r Report of multi-target sgRNAs, echo = FALSE}
 
 # number of gene lost due to multi-target sgRNAs
 print(paste("Number of multi-target sgRNAs: ", length(result_multi_target_sgrna$list_guides), sep = ""))
@@ -314,7 +314,7 @@ if(remove_all_single_mismatch == TRUE) {
 
 ```
 
-```{Report of single mismatch sgRNAs, echo = FALSE}
+```{r Report of single mismatch sgRNAs, echo = FALSE}
 
 if (remove_all_single_mismatch == TRUE) {
   # number of genes lost due to single mismatch sgRNAs
@@ -371,7 +371,7 @@ track_table <- function_df_count(track_table,
 
 ```
 
-```{Report of sgRNA with PAM-distal mismatch, echo = FALSE}
+```{r Report of sgRNA with PAM-distal mismatch, echo = FALSE}
 
 # number of genes lost due to PAM-distal single mismatch sgRNAs
 print(paste("Number of PAM-distal single mismatch sgRNAs: ", length(result_pam_distal_mismatch$list_guides_pam_single), sep = ""))
