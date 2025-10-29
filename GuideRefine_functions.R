@@ -80,9 +80,10 @@ single_mismatch_sgrna <- function(alignment_data) {
 
 }
 
-# function to remove sgRNA aligned with double mismatches at the most PAM distal site
-pam_distal_double_mismatch <- function(alignment_data){
-    detect_pam_distal_double_mismatch <- alignment_data %>% 
+# function to remove sgRNA aligned with mismatches at the most PAM distal site
+pam_distal_mismatch <- function(alignment_data, mismatches){
+  
+    annotate_cut_pos <- alignment_data %>% 
         dplyr::rename(pam_start = pam_site) %>%
         mutate(
             pam_start = ifelse(strand == '+', pam_start, pam_start-2),
@@ -93,39 +94,62 @@ pam_distal_double_mismatch <- function(alignment_data){
         relocate(pam_start, .after = cut_pos) %>%
         relocate(start_pos, .before = cut_pos) %>%
         relocate(end_pos, .after = start_pos) %>%
-        relocate(pam_end, .after = pam_start) %>%
+        relocate(pam_end, .after = pam_start)
+    
+    
+    detect_pam_distal_mismatches <- annotate_cut_pos %>%
         rowwise() %>%
         mutate(
-            mismatch_loc = list(which(strsplit(spacer, '')[[1]] != strsplit(protospacer, '')[[1]]))) %>%
-        mutate(
-            type = 
-            if_else(is.na(mismatch_loc[1]) | mismatch_loc[1] == 0,'perfect',
-            if_else(strand == '+' & (mismatch_loc[1] < 3 & mismatch_loc[2] < 3),'pam-distal double mismatch',
-            if_else(strand == '-' & (mismatch_loc[1] > 18 & mismatch_loc[2] > 18),'pam-distal double mismatch',
-                'double mismatch'
-                ))
-            )
-        )
-
-    pam_distal_double_mismatch <- detect_pam_distal_double_mismatch %>%
-        filter(type == 'pam-distal double mismatch')
-
-    pam_distal_count_dropped_guides_per_gene <- pam_distal_double_mismatch %>%
-        select(sgRNA, gene) %>%
-        count(sgRNA, gene) %>%
-        dplyr::rename('Frequency' = 'n')
-
-    dropped_due_to_pam_distal_double_mismatch <- pam_distal_count_dropped_guides_per_gene %>%
-        count(gene) %>%
-        dplyr::rename('PAM distal double mismatch' = 'n')
+            mismatch_loc = list(which(strsplit(spacer, '')[[1]] != strsplit(protospacer, '')[[1]])),
+            type = case_when(is.na(mismatch_loc[1]) | mismatch_loc[1] == 0 ~ "perfect",
+                             strand == "+" & mismatch_loc[1] < 3 & is.na(mismatch_loc[2]) ~ "pam-distal single mismatch",
+                             strand == "-" & mismatch_loc[1] > 18 & is.na(mismatch_loc[2]) ~ "pam-distal single mismatch",
+                             strand == '+' & (mismatch_loc[1] < 3 & mismatch_loc[2] < 3) ~ "pam-distal double mismatch",
+                             strand == '-' & (mismatch_loc[1] > 18 & mismatch_loc[2] > 18) ~ "pam-distal double mismatch",
+                             length(mismatch_loc) < 2 ~ "single mismatch",
+                             length(mismatch_loc) > 1 ~ "double mismatch",
+                             TRUE ~ "Uncategorized"
+            ))
     
-    pam_distal_double_mismatch_list_guides <- c(unique(pam_distal_count_dropped_guides_per_gene$sgRNA))
-
+    # PAM-distal single mismatches
+    pam_distal_single_mismatch <- detect_pam_distal_mismatches %>%
+      filter(type == 'pam-distal single mismatch') %>%
+      pull(sgRNA)
+    
+    pam_distal_single_mismatch_count_dropped_guides_per_gene <- detect_pam_distal_mismatches %>%
+      filter(sgRNA %in% pam_distal_single_mismatch) %>%
+      select(sgRNA, gene) %>%
+      count(sgRNA, gene) %>%
+      dplyr::rename('Frequency' = 'n')
+    
+    dropped_due_to_pam_distal_single_mismatch <- pam_distal_single_mismatch_count_dropped_guides_per_gene %>%
+      count(gene) %>%
+      dplyr::rename('PAM distal single mismatch' = 'n')
+    
+    
+    # PAM-distal double mismatches
+    pam_distal_double_mismatch <- detect_pam_distal_mismatches %>%
+      filter(type == 'pam-distal double mismatch') %>%
+      pull(sgRNA)
+    
+    pam_distal_double_mismatch_count_dropped_guides_per_gene <- detect_pam_distal_mismatches %>%
+      filter(sgRNA %in% pam_distal_double_mismatch) %>%
+      select(sgRNA, gene) %>%
+      count(sgRNA, gene) %>%
+      dplyr::rename('Frequency' = 'n')
+    
+    dropped_due_to_pam_distal_double_mismatch <- pam_distal_double_mismatch_count_dropped_guides_per_gene %>%
+      count(gene) %>%
+      dplyr::rename('PAM distal single mismatch' = 'n')
+    
     return(list(
-        pam_distal_df = detect_pam_distal_double_mismatch,
-        dropped_guides_num = pam_distal_count_dropped_guides_per_gene,
-        dropped_genes_num = dropped_due_to_pam_distal_double_mismatch,
-        list_guides = pam_distal_double_mismatch_list_guides
+        pam_distal_df = detect_pam_distal_mismatches,
+        dropped_guides_num_pam_single = pam_distal_single_mismatch_count_dropped_guides_per_gene,
+        dropped_genes_num_pam_single = dropped_due_to_pam_distal_single_mismatch,
+        dropped_guides_num_pam_double = pam_distal_double_mismatch_count_dropped_guides_per_gene,
+        dropped_genes_num_pam_double = dropped_due_to_pam_distal_double_mismatch,
+        list_guides_pam_single = pam_distal_single_mismatch,
+        list_guides_pam_double = pam_distal_double_mismatch
     ))
 
 }
