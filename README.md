@@ -1,7 +1,10 @@
 # GuideRefine: a tool to capture and remove multi-target-/off-target sgRNAs from CRISPR-Cas9 KO libraries
 a tool (R Markdown) to clean the CRISPR sgRNA library from:
 - suspected multi-target sgRNAs
-- off-target sgRNAs (align with single mismatch or double mismatch at the PAM distal site)
+- suspected off-target sgRNAs:
+  - sgRNA align with single mismatch at any location in 20-spacer nucleotides (optional)
+  - sgRNA align with single mismatch at PAM-distal site (position 1, 2 in + strand; and position 19, 20 in - strand)
+  - sgRNA align with double mismatch at PAM-distal site (position 1 & 2 in + strand; and position 19 & 20 in - strand)
 
 This tool is an adapted version of script developed by Barbara & Ryan, 2019
 https://pubmed.ncbi.nlm.nih.gov/31652272/
