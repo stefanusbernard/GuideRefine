@@ -151,28 +151,3 @@ saveRDS(gene_annot_granges, file = "T2T-CHM13v2.0_gene_annot_granges.rds")
 
 ```
 
-
-# 2nd method try to forge our own BSGenome package from T2T-CHM13 NCBI GCF assembly
-
-```{r}
-
-BiocManager::install("BSgenomeForge")
-library(BSgenomeForge)
-
-forgeBSgenomeDataPkgFromNCBI(
-  assembly_accession = "GCF_009914755.1",
-  organism = "Homo sapiens",
-  pkg_maintainer = "Stefanus Bernard <s.bernard5@universityofgalway.ie>",
-  circ_seqs = character(0)   # The NCBI RefSeq assembly differs from the submitted assembly in the following ways: Removed chromosome MT
-)
-
-
-remotes::install_local("./BSgenome.Hsapiens.NCBI.T2TCHM13v2.0/")
-
-
-library(BSgenome.Hsapiens.NCBI.T2TCHM13v2.0)
-
-```
-
-
-

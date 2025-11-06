@@ -1,0 +1,31 @@
+---
+title: "A script to forge T2T-CHM13 NCBI GCF Assembly using BSGenomeForge"
+author: "Stefanus Bernard"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+# 2nd method try to forge our own BSGenome package from T2T-CHM13 NCBI GCF assembly
+
+```{r}
+
+BiocManager::install("BSgenomeForge")
+library(BSgenomeForge)
+
+forgeBSgenomeDataPkgFromNCBI(
+  assembly_accession = "GCF_009914755.1",
+  organism = "Homo sapiens",
+  pkg_maintainer = "Stefanus Bernard <s.bernard5@universityofgalway.ie>",
+  circ_seqs = character(0)   # The NCBI RefSeq assembly differs from the submitted assembly in the following ways: Removed chromosome MT
+)
+
+
+remotes::install_local("./BSgenome.Hsapiens.NCBI.T2TCHM13v2.0/")
+
+
+library(BSgenome.Hsapiens.NCBI.T2TCHM13v2.0)
+
+```
+
+
+
