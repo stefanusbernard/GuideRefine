@@ -391,7 +391,7 @@ sgRNA_library_control <- library_alignment %>%
   select(sgRNA, spacer, gene) %>%
   distinct()
 
-# separate sgRNA not targeting anywhere
+# separate sgRNA not targeting anywhere (by checking sgRNA that does not have protospacer)
 sgRNA_not_target_anywhere <- library_alignment %>%
   filter(is.na(protospacer) & !str_detect(gene, terms_for_filtering)) %>%
   select(sgRNA, gene) %>%
@@ -414,7 +414,7 @@ track_table <- function_df_count(track_table,
                                  count_sgrna = length(unique(library_alignment$sgRNA)),
                                  num_genes = length(unique(library_alignment$gene)),
                                  num_alignments = length(library_alignment$sgRNA),
-                                 notes = paste(length(unique(sgRNA_not_target_anywhere$sgRNA)), " sgRNAs not target anywhere discarded"))
+                                 notes = paste0(sum(sgRNA_not_target_anywhere$`sgRNA not target anywhere`), " sgRNAs not target anywhere discarded"))
 ```
 
 ```{r Using NCBI CCDS data to find the overlap of sgRNA alignment with exon annotation, include = FALSE}
@@ -561,11 +561,7 @@ sgRNA_not_target_exon <- library_alignment %>%
 
 ```{r Add HGNC annotation of sgRNA library, include = FALSE}
 
-tmp_file <- tempfile(fileext = ".tsv")
-download.file(params$hgnc_link, tmp_file, mode = "wb")  # always works
-
 hgnc <- read_tsv(params$hgnc_link)
-unlink(tmp_file)
 
 hgnc_selected <- hgnc %>%
   select(symbol, name, locus_group, locus_type) %>%
