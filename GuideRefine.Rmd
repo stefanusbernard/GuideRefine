@@ -835,4 +835,13 @@ write.xlsx(track_table, file = paste(params$output_dir, sgRNA_library_selected, 
 
 ```
 
+## Details of R session
+
+```{r Show R session, echo = FALSE}
+
+sessionInfo()
+
+```
+
+
 

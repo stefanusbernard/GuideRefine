@@ -2,10 +2,10 @@ library(rmarkdown)
 
 # Define parameters
 my_params <- list(
-  output_filename = "jacquere_refined_report",
+  output_filename = "avana_refined_report",
   
   library_dir = "./public_crispr_library/",
-  sgrna_library = "Jacquere_PerGuideAnnotations_Quota4",
+  sgrna_library = "avana_library",
   terms = c("CONTROL", "Control", "control", "INTRON", "Intron", "intron", "NO_SITE", "ONE_SITE_INTERGENIC"),
   
   # reference genome and hgnc annotation
