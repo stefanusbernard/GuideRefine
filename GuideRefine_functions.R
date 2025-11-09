@@ -50,7 +50,7 @@ multi_target_sgrna <- function(alignment_data){
         dplyr::rename('multi-target sgRNA' = 'n')
     
     # List of multi-target sgRNAs
-    multi_target_sgRNA_list_guides <- c(multi_target_sgRNAs_count_dropped_guides_per_gene$sgRNA)
+    multi_target_sgRNA_list_guides <- c(unique(multi_target_sgRNAs_count_dropped_guides_per_gene$sgRNA))
 
     return(list(
         dropped_guides_num = multi_target_sgRNAs_count_dropped_guides_per_gene,
@@ -111,10 +111,13 @@ pam_distal_mismatch <- function(alignment_data, mismatches){
                              TRUE ~ "Uncategorized"
             ))
     
+    # WARNING: you pull sgRNA using the alignment data, dont forget to use unique() as the number of sgRNA will be duplicated instead
+    
     # PAM-distal single mismatches
     pam_distal_single_mismatch <- detect_pam_distal_mismatches %>%
       filter(type == 'pam-distal single mismatch') %>%
-      pull(sgRNA)
+      pull(sgRNA) %>%
+      unique()
     
     pam_distal_single_mismatch_count_dropped_guides_per_gene <- detect_pam_distal_mismatches %>%
       filter(sgRNA %in% pam_distal_single_mismatch) %>%
@@ -130,7 +133,8 @@ pam_distal_mismatch <- function(alignment_data, mismatches){
     # PAM-distal double mismatches
     pam_distal_double_mismatch <- detect_pam_distal_mismatches %>%
       filter(type == 'pam-distal double mismatch') %>%
-      pull(sgRNA)
+      pull(sgRNA) %>%
+      unique()
     
     pam_distal_double_mismatch_count_dropped_guides_per_gene <- detect_pam_distal_mismatches %>%
       filter(sgRNA %in% pam_distal_double_mismatch) %>%
