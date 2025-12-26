@@ -100,7 +100,7 @@ function_export_table <- function(library_table, filename) {
 ```{r}
 
 file_dir <- "./public_crispr_library/"
-filename <- "avana_library.txt"
+filename <- "library.txt"
 
 exported_filename <- sub("\\..*$", "", filename)
 sgRNA_library <- read_delim(paste(file_dir, filename, sep = ''))
