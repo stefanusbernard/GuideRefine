@@ -97,6 +97,9 @@ pam_distal_mismatch <- function(alignment_data, mismatches){
         relocate(pam_end, .after = pam_start)
     
     
+    # There is a possibility that a single guide share the pam-distal single mismatch and pam-distal double mismatch
+    # that is OK as long as they are detected in either one condition
+    
     detect_pam_distal_mismatches <- annotate_cut_pos %>%
         rowwise() %>%
         mutate(
