@@ -23,3 +23,5 @@ Output file:
 1. Refined sgRNA library formatted according to MAGeCK input (sgRNA, spacer, gene; without header)
 2. HTML report from R Markdown
 3. Excel report containing sgRNAs targeting each genes
+
+test
