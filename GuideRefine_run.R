@@ -2,11 +2,11 @@ library(rmarkdown)
 
 # Define parameters
 my_params <- list(
-  output_filename = "avana_refined_report",
+  output_filename = "tkov3_refined_report",
   
   library_dir = "./public_crispr_library/",
-  sgrna_library = "avana_library",
-  terms = c("CONTROL", "Control", "control", "INTRON", "Intron", "intron", "NO_SITE", "ONE_SITE_INTERGENIC"),
+  sgrna_library = "tkov3_guide_sequence",
+  terms = c("CONTROL", "Control", "control", "INTRON", "Intron", "intron", "NO_SITE", "ONE_SITE_INTERGENIC", "LacZ", "luciferase", "EGFR"),
   
   # reference genome and hgnc annotation
   ref_bsgenome = "BSgenome.Hsapiens.NCBI.T2TCHM13v2.0",
@@ -32,10 +32,10 @@ my_params <- list(
   # bowtie_index_dir = "bowtie_index/hg38/",
   # name_prefix_for_index = "hg38",
   
-  remove_all_single_mismatch = FALSE,
+  remove_all_single_mismatch = TRUE,
   
   # output dir
-  output_dir = "./output_cleaning/T2T-CHM13/"
+  output_dir = "./output_cleaning/"
 )
 
 
