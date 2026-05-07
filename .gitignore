@@ -16,3 +16,6 @@
 /bowtie_index/
 /annotation_file/BSgenome.Hsapiens.NCBI.T2TCHM13v2.0
 .Rproj.user
+._*
+.RData
+.Rhistory
