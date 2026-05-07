@@ -26,6 +26,7 @@ params:
   check_index_file: "T2T-CHM13_BSgenome.1.ebwt"
   bowtie_index_dir: "bowtie_index/T2T-CHM13_bsgenome/"
   name_prefix_for_index: "T2T-CHM13_BSgenome"
+  fasta_file: ""  # path to reference FASTA file; required only when bowtie index has not been built yet
   remove_all_single_mismatch: TRUE
   # output location
   output_dir: "./output_cleaning/"
@@ -47,7 +48,7 @@ The current HGNC dataset were retrieved from https://storage.googleapis.com/publ
 1.  Import required packages
 2.  Define any filename
 3.  Import sgRNA library and create dir for output (output_cleaning) and intermediate files (object_intermediate)
-4.  Alignment of sgRNA to HG38 UCSC using Bowtie2 (2 mismatches)
+4.  Alignment of sgRNA to reference genome (hg38 or T2T-CHM13) using Bowtie via crisprBowtie (max 2 mismatches)
 5.  Post alignment data processing
 6.  Find and drop multi-target sgRNAs
 7.  Find and drop single mismatch sgRNAs (optional)
@@ -76,8 +77,7 @@ for (pkg in list_packages_bioconductor) {
   }
 }
 
-list_packages <- c("hgnc",
-                   "stringr",
+list_packages <- c("stringr",
                    "directlabels",
                    "tidyverse",
                    "knitr")
@@ -89,7 +89,6 @@ if(length(new_packages)) install.packages(new_packages)
 
 ```{r Import required library, include = FALSE}
 
-setwd(getwd())
 source("GuideRefine_functions.R")
 
 library(crisprBase)
@@ -97,7 +96,6 @@ library(crisprBowtie)
 library(GenomeInfoDb)
 library(params$ref_bsgenome, character.only = TRUE)
 library(GenomicRanges)
-library(hgnc)
 library(stringr)
 library(directlabels)
 library(tidyverse)
@@ -137,7 +135,7 @@ aln_2_mismatch_filename <- paste(sgRNA_library_selected, "_aln.csv", sep ="")
 check_index_file <- params$check_index_file
 bowtie_index_dir <- params$bowtie_index_dir
 name_prefix_for_index <- params$name_prefix_for_index
-
+fasta_file <- params$fasta_file
 
 # alignment criteria
 remove_all_single_mismatch <- params$remove_all_single_mismatch
@@ -148,8 +146,10 @@ paste("Genome version:", unique(genome(ref_bsgenome_selected)))
 
 ```
 
-```{r Create folder and import library cellecta, include = FALSE}
-dir.create("object_intermediate")
+```{r Create folder and import library, include = FALSE}
+dir.create("object_intermediate", recursive = TRUE, showWarnings = FALSE)
+dir.create(aln_file_dir, recursive = TRUE, showWarnings = FALSE)
+dir.create(params$output_dir, recursive = TRUE, showWarnings = FALSE)
 sgRNA_library <- read_tsv(paste(file_dir_location, sgRNA_library_selected, ".tsv", sep = ""), col_names = FALSE)
 colnames(sgRNA_library) <- c("sgRNA", "spacer", "gene")
 
@@ -164,7 +164,7 @@ file_test("-f", paste(bowtie_index_dir, check_index_file, sep="")) # returns TRU
 
 ```{r Indexing HG38 if indexing have not been done previously, include = FALSE}
 if (file_test("-f", paste(bowtie_index_dir, check_index_file, sep="")) == FALSE) {
-  Rbowtie::bowtie_build(fastaFile,
+  Rbowtie::bowtie_build(fasta_file,
                          outdir = bowtie_index_dir,
                          force = TRUE,
                          prefix = name_prefix_for_index)
@@ -561,9 +561,9 @@ sgRNA_not_target_exon <- library_alignment %>%
 
 ```{r Add HGNC annotation of sgRNA library, include = FALSE}
 
-hgnc <- read_tsv(params$hgnc_link)
+hgnc_data <- read_tsv(params$hgnc_link)
 
-hgnc_selected <- hgnc %>%
+hgnc_selected <- hgnc_data %>%
   select(symbol, name, locus_group, locus_type) %>%
   dplyr::rename("gene" = "symbol")
 
@@ -618,22 +618,6 @@ sgRNA_library_cleaned <- sgRNA_library_gene_df_annot %>%
   select(sgrna, spacer, gene) %>%
   distinct() %>%
   dplyr::rename("sgRNA" = "sgrna")
-
-count_guides_per_gene <- sgRNA_library_cleaned %>%
-  count(gene) %>%
-  count(n) %>%
-  mutate(`total number of guides` = n * nn) %>%
-  dplyr::rename("number of guides per gene" = "n") %>%
-  dplyr::rename("how many genes" = "nn")
-
-print(paste("total number of sgRNA: ", sum(count_guides_per_gene$`total number of guides`)))
-
-num_original_genes <- length(unique(sgRNA_library$gene))
-num_genes_after_cleaning <- sum(count_guides_per_gene$`how many genes`)
-
-paste("number of original target genes in the library: ", length(unique(sgRNA_library$gene)))
-paste("number of genes after cleaning: ", sum(count_guides_per_gene$`how many genes`))
-paste("number of genes lost: ", num_original_genes-num_genes_after_cleaning)
 
 ```
 
@@ -814,8 +798,8 @@ if (remove_all_single_mismatch == TRUE) {
 
 ```{r Snippets of exported file, echo = FALSE}
 
-kable(head(sgRNA_library_refined, 10))
-kable(head(total_sgRNA_or_gene, 10))
+# kable(head(sgRNA_library_refined))
+# kable(head(total_sgRNA_or_gene))
 
 ```
 
