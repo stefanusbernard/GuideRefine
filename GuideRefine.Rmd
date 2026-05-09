@@ -1,5 +1,6 @@
 ---
 title: "GuideRefine: a tool to remove multi-target-/off-target sgRNAs from genome-wide CRISPR-KO screen libraries"
+subtitle: "Developed with R v4.5.2"
 author: "Author: Stefanus Bernard"
 date: "Date: `r format(Sys.time(), '%d %B %Y')`"
 output: 
@@ -63,30 +64,6 @@ The current HGNC dataset were retrieved from https://storage.googleapis.com/publ
 
 # Pipeline
 
-```{r install required packages, include = FALSE}
-
-list_packages_bioconductor <- c("crisprBase",
-                                "crisprBowtie",
-                                "BSgenome.Hsapiens.UCSC.hg38",
-                                "BSgenome.Hsapiens.NCBI.T2T.CHM13v2.0",
-                                "GenomicRanges")
-
-for (pkg in list_packages_bioconductor) {
-  if (!requireNamespace(pkg, quietly = TRUE)) {
-    BiocManager::install(pkg, ask = FALSE, update = TRUE)
-  }
-}
-
-list_packages <- c("stringr",
-                   "directlabels",
-                   "tidyverse",
-                   "knitr")
-
-new_packages <- list_packages[!(list_packages %in% installed.packages()[,"Package"])]
-if(length(new_packages)) install.packages(new_packages)
-
-```
-
 ```{r Import required library, include = FALSE}
 
 source("GuideRefine_functions.R")
@@ -100,7 +77,7 @@ library(stringr)
 library(directlabels)
 library(tidyverse)
 library(knitr)
-library(xlsx)
+library(openxlsx)
 
 ```
 
@@ -813,9 +790,11 @@ write_tsv(sgRNA_library_refined,
 write_tsv(list_discarded_sgrna, 
           file = paste(params$output_dir, sgRNA_library_selected, "_disposed_sgRNAs.tsv", sep = ""), col_names = TRUE)
 
-write.xlsx(total_sgRNA_or_gene, file = paste(params$output_dir, sgRNA_library_selected, "_full_report.xlsx", sep = ""), row.names = FALSE, sheetName = "Genes Report", append = TRUE)
-
-write.xlsx(track_table, file = paste(params$output_dir, sgRNA_library_selected, "_full_report.xlsx", sep = ""), row.names = FALSE, sheetName = "Refining Process Tracker", append = TRUE)
+write.xlsx(
+  list("Genes Report" = total_sgRNA_or_gene,
+       "Refining Process Tracker" = track_table),
+  file = paste(params$output_dir, sgRNA_library_selected, "_full_report.xlsx", sep = "")
+)
 
 ```
 
