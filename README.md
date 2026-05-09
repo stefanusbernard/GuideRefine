@@ -15,24 +15,32 @@ Adapted from [DeKegel & Ryan, 2019](https://pubmed.ncbi.nlm.nih.gov/31652272/).
 
 ## Requirements
 
-- R ≥ 4.2 and Bioconductor ≥ 3.16
+- R ≥ 4.2 and Bioconductor ≥ 3.16 (developed and tested on **R v4.5.2**)
 - [Bowtie](https://bowtie-bio.sourceforge.net/) ≥ 1.3 installed and on your `PATH`
 
-Install R packages:
+Install all required R packages by running:
 
 ```r
-install.packages(c("tidyverse", "stringr", "directlabels", "knitr", "xlsx"))
-
-if (!require("BiocManager")) install.packages("BiocManager")
-BiocManager::install(c("crisprBase", "crisprBowtie", "GenomicRanges",
-                       "GenomeInfoDb", "BSgenome.Hsapiens.UCSC.hg38"))
+source("GuideRefine_install_req_packages.R")
 ```
+
+This installs all CRAN and Bioconductor dependencies in one step. No Java required.
 
 ---
 
 ## How to use
 
-### Step 1 — Prepare your input library
+### Step 1 — Install required packages
+
+Open R or RStudio and run:
+
+```r
+source("GuideRefine_install_req_packages.R")
+```
+
+This only needs to be done once. It installs all CRAN and Bioconductor packages required by the pipeline.
+
+### Step 2 — Prepare your input library
 
 Your sgRNA library must be a **TSV file with no header** and three columns:
 
@@ -42,7 +50,7 @@ sgRNA_name    spacer_sequence    gene_symbol
 
 Place it in the `public_crispr_library/` folder. Several public libraries (Brunello, Avana, GeckoV2, TKOv3) are already included there.
 
-### Step 2 — Download the CCDS annotation (one-time setup)
+### Step 3 — Download the CCDS annotation (one-time setup)
 
 Download the latest human CCDS file and save it to `annotation_file/`:
 
@@ -52,7 +60,7 @@ https://ftp.ncbi.nlm.nih.gov/pub/CCDS/current_human/CCDS.current.txt
 
 A copy from 2022 (`CCDS.20221027.txt`) is already included and works out of the box.
 
-### Step 3 — Configure `GuideRefine_run.R`
+### Step 4 — Configure `GuideRefine_run.R`
 
 Open [GuideRefine_run.R](GuideRefine_run.R) and update the highlighted fields:
 
@@ -87,7 +95,7 @@ my_params <- list(
 
 > **T2T-CHM13 genome:** If you want to align against T2T-CHM13 instead of hg38, run the two notebooks in `annotation_file/` first to build the BSgenome package and CCDS annotation, then swap in the T2T parameter block shown in the comments inside `GuideRefine_run.R`.
 
-### Step 4 — Run the pipeline
+### Step 5 — Run the pipeline
 
 ```r
 source("GuideRefine_run.R")
@@ -120,9 +128,10 @@ Results are written to `output_cleaning/`:
 
 ```
 GuideRefine/
-├── GuideRefine_run.R          # Start here — configure and run the pipeline
-├── GuideRefine.Rmd            # Pipeline logic (called automatically by _run.R)
-├── GuideRefine_functions.R    # Helper functions
+├── GuideRefine_install_req_packages.R  # Run once to install all dependencies
+├── GuideRefine_run.R                   # Configure and run the pipeline
+├── GuideRefine.Rmd                     # Pipeline logic (called automatically by _run.R)
+├── GuideRefine_functions.R             # Helper functions
 │
 ├── annotation_file/           # CCDS and genome annotation files
 ├── bowtie_index/              # Pre-built Bowtie index (hg38 and T2T-CHM13)
