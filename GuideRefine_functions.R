@@ -290,14 +290,14 @@ update_gene_symbol <- function(gene_df) {
   # check for duplicate spacer in gene_df_match and discard it (sgRNA targeting the same gene but different exon location)
   gene_df_match <- gene_df_check %>%
     filter(notes == "symbol match") %>%
-    mutate(duplicate_spacer_gene = duplicated(spacer, gene)) %>%
+    mutate(duplicate_spacer_gene = duplicated(data.frame(spacer, gene))) %>%
     arrange(sgrna) %>%
     filter(!duplicate_spacer_gene == TRUE)
   
   # separate sgRNA with gene symbol mismatch dataframe, discard duplicated spacer
   gene_df_mismatch <- gene_df_check %>%
     filter(notes == "symbol mismatch") %>%
-    mutate(duplicate_spacer_gene = duplicated(spacer, gene)) %>%
+    mutate(duplicate_spacer_gene = duplicated(data.frame(spacer, gene))) %>%
     arrange(gene) %>%
     filter(!duplicate_spacer_gene == TRUE)
   
@@ -326,7 +326,7 @@ update_gene_symbol <- function(gene_df) {
   gene_df_mismatch <- gene_df_mismatch %>%
     full_join(corrected_exist_gene, by = names(corrected_exist_gene)) %>%
     arrange(gene, desc(notes)) %>%
-    mutate(duplicate_spacer_gene = duplicated(spacer, gene))
+    mutate(duplicate_spacer_gene = duplicated(data.frame(spacer, gene)))
   
   # full_join the gene_df_mismatch with gene_df_match to become a gene_df_corrected
   gene_df_corrected <- gene_df_match %>%
