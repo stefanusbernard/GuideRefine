@@ -4,7 +4,7 @@ A pipeline to remove problematic sgRNAs from genome-wide CRISPR-Cas9 knockout li
 
 GuideRefine aligns every guide to the reference genome and removes guides that:
 - hit more than one genomic locus (**multi-target**)
-- align with a single mismatch anywhere in the 20 nt spacer (**off-target**, optional)
+- align with a single mismatch anywhere in the 20 nt spacer (**off-target**, default settings ON, optional and can be switch off)
 - align with a single or double mismatch at the PAM-distal region (**off-target**)
 
 Genes left with fewer than 3 valid guides after filtering are also removed.
