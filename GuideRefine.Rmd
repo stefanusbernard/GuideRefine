@@ -780,7 +780,6 @@ if (remove_all_single_mismatch == TRUE) {
 -   Export the refined sgRNA library (TSV file)
 -   Export the total sgRNA or gene lost (Excel file)
 
-
 ```{r Export refined sgRNA library, include = FALSE}
 
 # Export refined sgRNA library
