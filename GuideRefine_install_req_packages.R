@@ -27,7 +27,7 @@ list_packages_cran <- c(
   "directlabels",
   "tidyverse",
   "knitr",
-  "xlsx"
+  "openxlsx"
 )
 
 new_packages <- list_packages_cran[!(list_packages_cran %in% installed.packages()[, "Package"])]
