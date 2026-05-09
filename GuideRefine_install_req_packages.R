@@ -1,0 +1,34 @@
+# Install and update all required packages for the GuideRefine pipeline
+
+# BiocManager is required to install Bioconductor packages
+if (!requireNamespace("BiocManager", quietly = TRUE)) {
+  install.packages("BiocManager")
+}
+
+list_packages_bioconductor <- c(
+  "crisprBase",
+  "crisprBowtie",
+  "Rbowtie",
+  "BSgenome.Hsapiens.UCSC.hg38",
+  "BSgenome.Hsapiens.NCBI.T2T.CHM13v2.0",
+  "GenomicRanges",
+  "GenomeInfoDb"
+)
+
+for (pkg in list_packages_bioconductor) {
+  if (!requireNamespace(pkg, quietly = TRUE)) {
+    BiocManager::install(pkg, ask = FALSE, update = TRUE)
+  }
+}
+
+list_packages_cran <- c(
+  "rmarkdown",
+  "stringr",
+  "directlabels",
+  "tidyverse",
+  "knitr",
+  "xlsx"
+)
+
+new_packages <- list_packages_cran[!(list_packages_cran %in% installed.packages()[, "Package"])]
+if (length(new_packages)) install.packages(new_packages)
