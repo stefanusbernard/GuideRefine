@@ -12,7 +12,6 @@ output:
       self_contained: true
       
 params:
-  output_filename: "output.html"
   # library directory and control guides name
   library_dir: "./public_crispr_library/"
   sgrna_library: "Jacquere_PerGuideAnnotations_Quota4"
@@ -31,6 +30,7 @@ params:
   remove_all_single_mismatch: TRUE
   # output location
   output_dir: "./output_cleaning/"
+  output_filename: "output.html"
   
 ---
 
@@ -484,8 +484,13 @@ gene_track_annotation <- gene_df_corrected[["gene_symbol_check"]] %>%
   ungroup()
 
 # corrected_sgrna_report : a dataframe from gene_track_annotation used for the report
+# aggregate by new gene symbol so that multiple old aliases mapping to the same new symbol
+# produce one row with summed corrected guide count (fixes duplicate rows for e.g. PALM2AKAP2, SEPTIN4)
 corrected_sgrna_report <- gene_track_annotation %>%
-  select(-c(old_gene, notes))
+  select(-c(old_gene, notes)) %>%
+  group_by(gene) %>%
+  summarise(`Additional sgRNA (Corrected)` = sum(`Additional sgRNA (Corrected)`)) %>%
+  ungroup()
 
 prev_gene <- c(gene_track_annotation$old_gene)
 align_gene <- c(gene_track_annotation$gene)
@@ -531,7 +536,7 @@ track_table <- function_df_count(track_table,
 
 ```{r Find sgRNAs failed to target exon, include = FALSE}
 
-list_sgRNA_not_target_exon <- setdiff(unique(library_alignment$sgRNA), unique(gene_df_corrected[["gene_symbol_corrected"]]$sgrna))
+list_sgRNA_not_target_exon <- setdiff(unique(library_alignment$sgRNA), unique(gene_df_corrected[["gene_symbol_check"]]$sgrna))
 
 sgRNA_not_target_exon <- library_alignment %>%
   select(sgRNA, gene) %>%
@@ -764,6 +769,7 @@ if (remove_all_single_mismatch == TRUE) {
     pam_distal_single_mismatch_guides = pad(result_pam_distal_mismatch$list_guides_pam_single, max_len),
     pam_distal_double_mismatch_guides = pad(result_pam_distal_mismatch$list_guides_pam_double, max_len),
     guides_not_target_anywhere = pad(sgRNA_not_target_anywhere_ids, max_len),
+    guides_not_target_exon = pad(list_sgRNA_not_target_exon, max_len),
     stringsAsFactors = FALSE)
 } else {
   list_discarded_sgrna <- data.frame(
@@ -771,6 +777,7 @@ if (remove_all_single_mismatch == TRUE) {
     pam_distal_single_mismatch_guides = pad(result_pam_distal_mismatch$list_guides_pam_single, max_len),
     pam_distal_double_mismatch_guides = pad(result_pam_distal_mismatch$list_guides_pam_double, max_len),
     guides_not_target_anywhere = pad(sgRNA_not_target_anywhere_ids, max_len),
+    guides_not_target_exon = pad(list_sgRNA_not_target_exon, max_len),
     stringsAsFactors = FALSE)
   }
 
