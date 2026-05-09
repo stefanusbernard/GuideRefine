@@ -27,8 +27,18 @@ list_packages_cran <- c(
   "directlabels",
   "tidyverse",
   "knitr",
-  "openxlsx"
+  "openxlsx",
+  "pandoc"
 )
 
 new_packages <- list_packages_cran[!(list_packages_cran %in% installed.packages()[, "Package"])]
 if (length(new_packages)) install.packages(new_packages)
+
+# Ensure pandoc (system tool required by rmarkdown) is available
+if (!rmarkdown::pandoc_available()) {
+  message("Pandoc not found. Installing via the pandoc R package...")
+  pandoc::pandoc_install()
+  pandoc::pandoc_activate()
+}
+
+message("Pandoc version: ", rmarkdown::pandoc_version())
