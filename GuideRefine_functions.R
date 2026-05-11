@@ -80,21 +80,22 @@ pam_distal_mismatch <- function(alignment_data){
                 spacer, protospacer,
                 SIMPLIFY = FALSE
             ),
+            guide_len = nchar(spacer),
             n_mm = lengths(mismatch_loc),
             pos1 = vapply(mismatch_loc, function(x) if (length(x) >= 1) x[1L] else NA_integer_, integer(1L)),
             pos2 = vapply(mismatch_loc, function(x) if (length(x) >= 2) x[2L] else NA_integer_, integer(1L)),
             type = case_when(
-                n_mm == 0                              ~ "perfect",
-                strand == "+" & pos1 < 3 & n_mm == 1  ~ "pam-distal single mismatch",
-                strand == "-" & pos1 > 18 & n_mm == 1 ~ "pam-distal single mismatch",
-                strand == "+" & pos1 < 3 & pos2 < 3   ~ "pam-distal double mismatch",
-                strand == "-" & pos1 > 18 & pos2 > 18 ~ "pam-distal double mismatch",
-                n_mm == 1                              ~ "single mismatch",
-                n_mm > 1                               ~ "double mismatch",
-                TRUE                                   ~ "Uncategorized"
+                n_mm == 0                                                      ~ "perfect",
+                strand == "+" & pos1 < 3 & n_mm == 1                          ~ "pam-distal single mismatch",
+                strand == "-" & pos1 > (guide_len - 2) & n_mm == 1            ~ "pam-distal single mismatch",
+                strand == "+" & pos1 < 3 & pos2 < 3                           ~ "pam-distal double mismatch",
+                strand == "-" & pos1 > (guide_len - 2) & pos2 > (guide_len - 2) ~ "pam-distal double mismatch",
+                n_mm == 1                                                      ~ "single mismatch",
+                n_mm > 1                                                       ~ "double mismatch",
+                TRUE                                                           ~ "Uncategorized"
             )
         ) %>%
-        select(-n_mm, -pos1, -pos2)
+        select(-guide_len, -n_mm, -pos1, -pos2)
     
     # WARNING: you pull sgRNA using the alignment data, dont forget to use unique() as the number of sgRNA will be duplicated instead
     
