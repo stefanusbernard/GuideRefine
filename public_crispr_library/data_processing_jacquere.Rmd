@@ -14,7 +14,7 @@ setwd(getwd())
 # intergenic and 100 non-targeting guides that feature comparable predicted on-target activity 
 
 
-data <- read_csv("./Jacquere_PerGuideAnnotations_Quota4.csv")
+data <- read_csv("./public_crispr_library/Jacquere_PerGuideAnnotations_Quota4.csv")
 
 library_table <- data %>%
   select(`sgRNA Sequence`, `Target Gene Symbol`) %>%
@@ -28,7 +28,8 @@ library_table <- library_table %>%
     gene = coalesce(!!!lapply(select(., starts_with("gene")), function(x) na_if(x, "nan")))
   ) %>%
   select(sequence, gene) %>%
-  drop_na()
+  drop_na() %>%
+  arrange(gene)
 
 run_length <- rle(library_table$gene)$lengths
 sequential_number <- sequence(run_length)
@@ -39,7 +40,7 @@ processed_library_table <- library_table %>%
   dplyr::relocate(gene, .after = sequence) %>%
   arrange(gene)
 
-write_tsv(processed_library_table, "./Jacquere_PerGuideAnnotations_Quota4.tsv", col_names = FALSE)
+write_tsv(processed_library_table, "./public_crispr_library/Jacquere_PerGuideAnnotations_Quota4.tsv", col_names = FALSE)
 
 ```
 
