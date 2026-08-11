@@ -29,7 +29,8 @@ list_packages_cran <- c(
   "tidyverse",
   "knitr",
   "openxlsx",
-  "pandoc"
+  "pandoc",
+  "data.table"  # only needed for the optional T2T-CHM13 annotation script
 )
 
 new_packages <- list_packages_cran[!(list_packages_cran %in% installed.packages()[, "Package"])]
