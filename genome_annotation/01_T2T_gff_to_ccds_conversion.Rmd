@@ -1,0 +1,153 @@
+---
+title: "A script to convert GFF to CCDS format"
+author: "Stefanus Bernard"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+# Import library
+
+```{r setup, include=FALSE}
+
+library(tidyverse)
+library(rtracklayer)
+library(GenomicRanges)
+library(data.table)
+library(ape)
+
+```
+
+# This is how to read CCDS files and convert it to a format where we could see the exon location in each CDS
+
+```{r}
+
+ccds <- read_delim("CCDS.20221027.txt", delim = '\t')
+
+ccds$cds_from <- as.integer(ccds$cds_from)
+ccds$cds_to <- as.integer(ccds$cds_to)
+
+list_chr <- paste0('chr', c(1:22, 'X', 'Y'))
+
+ccds <- ccds %>%
+    dplyr::rename('chr' = '#chromosome') %>%
+    mutate(chr = str_c("chr", chr)) %>%
+    filter(ccds_status %in% c("Public", "Reviewed, update pending", "Under review, update")) %>%
+    filter(chr %in% list_chr, !is.na(cds_from), !is.na(cds_to))
+
+genome_info <- GenomeInfoDb::Seqinfo(genome = "hg38")[list_chr]
+
+ccds_exon <- ccds %>%
+    mutate(cds_interval = str_replace_all(cds_locations, "[\\[\\]]", "") %>% str_split("\\s*,\\s*")) %>%
+    tidyr::unnest(cds_interval) %>%
+    group_by(gene, gene_id, cds_locations) %>%
+    mutate(exon_code = ifelse(cds_strand=="+", 1:dplyr::n(), dplyr::n():1)) %>%
+    ungroup() %>%
+    dplyr::mutate(cds_start = str_extract(cds_interval, "^[0-9]+") %>% as.integer,
+                    cds_end = str_extract(cds_interval, "[0-9]+$") %>% as.integer) %>%
+    dplyr::select(gene, gene_id, chr, start=cds_start, end=cds_end, strand=cds_strand,
+                    gene_start=cds_from, gene_end=cds_to, exon_code)
+
+
+
+```
+
+# NCBI T2T-CHM13 GFF file convert to a NCBI CCDS like format
+
+filter data in command line using zgrep -P "\tmRNA\t" GCF_009914755.1_T2T-CHM13v2.0_genomic.gff.gz | grep "tag=RefSeq Select" > T2T-CHM13v2_canonical_mrna.gff3
+
+Canonical transcript were defined by obtaining the tag RefSeq Select in the original GFF file (RefSeq Select is the representative transcript for every protein-coding genes) 
+
+```{r}
+
+## 1. Read canonical transcripts directly from gzipped GFF
+canonical <- fread(
+  cmd = "zgrep -P '\tmRNA\t' GCF_009914755.1_T2T-CHM13v2.0_genomic.gff.gz | grep 'tag=RefSeq Select'",
+  sep = "\t", header = FALSE,
+  col.names = c("seqid","source","type","start","end","score","strand","phase","attr")
+)[, .(
+  transcript_id = sub(".*ID=([^;]+);.*", "\\1", attr),
+  gene_id       = sub(".*GeneID:([0-9]+).*", "\\1", attr),
+  gene_symbol   = sub(".*gene=([^;]+).*", "\\1", attr),
+  seqid, strand
+)]
+
+## 2. Assembly report for accession ↔ chr mapping
+assembly_report <- read_tsv("T2T-CHM13v2_assembly_report.txt")
+mapping <- assembly_report %>%
+  select(chr = `Sequence-Name`, RefSeq_Accession = `RefSeq-Accn`)
+
+## 3. Read CDS features from the same GFF
+cds <- fread(
+  cmd = "zgrep -P '\tCDS\t' GCF_009914755.1_T2T-CHM13v2.0_genomic.gff.gz",
+  sep = "\t", header = FALSE,
+  col.names = c("seqid","source","type","start","end","score","strand","phase","attr")
+)[, .(
+  transcript_id = sub(".*Parent=([^;]+).*", "\\1", attr),
+  seqid, start, end, strand
+)]
+
+## 4. Join CDS with canonical transcripts
+cds_canonical <- merge(
+  cds[, .(transcript_id, seqid, start, end, strand)],        # only keep unique columns from CDS
+  canonical[, .(transcript_id, gene_id, gene_symbol)],       # drop seqid/strand here
+  by = "transcript_id",
+  allow.cartesian = TRUE
+)
+
+## 5. Collapse CDS ranges per gene
+cds_gene <- cds_canonical[, .(
+  CDS_ranges = list(paste0(start, "-", end)),  # proper list of ranges
+  CDS_start  = min(start),
+  CDS_end    = max(end)
+), by = .(gene_id, gene_symbol, seqid, strand)]
+
+## 6. Map accessions to chr names and tidy columns
+cds_gene <- merge(cds_gene, mapping, by.x="seqid", by.y="RefSeq_Accession", all.x=TRUE)
+
+cds_gene <- cds_gene %>%
+  dplyr::rename(
+    "nc_accession" = "seqid",
+    "gene" = "gene_symbol",
+    "cds_from" = "CDS_start",
+    "cds_strand" = "strand",
+    "cds_to" = "CDS_end",
+    "cds_locations" = "CDS_ranges"
+  ) %>%
+  relocate(chr, .before = nc_accession) %>%
+  relocate(gene, .after = nc_accession) %>%
+  relocate(cds_locations, .after = cds_to)
+
+```
+
+# Process CDS data from T2T-CHM13 for the sgRNA library refinement pipeline
+
+```{r}
+
+cds_gene$cds_from <- as.integer(cds_gene$cds_from)
+cds_gene$cds_to <- as.integer(cds_gene$cds_to)
+
+list_chromosome <- c(1:22, 'X', 'Y')
+
+cds_gene <- cds_gene %>%
+    filter(!is.na(cds_from), !is.na(cds_to))
+
+cds_gene_exon <- cds_gene %>%
+    tidyr::unnest(cds_locations) %>%
+    group_by(gene, gene_id) %>%
+    mutate(exon_code = ifelse(cds_strand == "+", 1:dplyr::n(), dplyr::n():1)) %>%
+    ungroup() %>%
+    dplyr::mutate(cds_start = str_extract(cds_locations, "^[0-9]+") %>% as.integer,
+                  cds_end = str_extract(cds_locations, "[0-9]+$") %>% as.integer) %>%
+    dplyr::select(gene, gene_id, chr, start = cds_start, end = cds_end, strand = cds_strand,
+                    gene_start = cds_from, gene_end = cds_to, exon_code)
+
+genome_info <- GenomeInfoDb::Seqinfo(genome = "T2T-CHM13v2.0")[list_chromosome]
+
+gene_annot_granges <- cds_gene_exon %>% 
+      GenomicRanges::makeGRangesFromDataFrame(seqinfo = genome_info, 
+                                              keep.extra.columns = T, 
+                                              na.rm = TRUE)
+saveRDS(gene_annot_granges, file = "T2T-CHM13v2.0_gene_annot_granges.rds")
+
+```
+

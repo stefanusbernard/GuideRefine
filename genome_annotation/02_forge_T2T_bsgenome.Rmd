@@ -1,0 +1,39 @@
+---
+title: "A script to forge T2T-CHM13 NCBI GCF Assembly using BSGenomeForge"
+author: "Stefanus Bernard"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+# 2nd method try to forge our own BSGenome package from T2T-CHM13 NCBI GCF assembly
+
+```{r}
+
+BiocManager::install("BSgenomeForge", force = TRUE)
+library(BSgenomeForge)
+
+# Anchor all output to the script's directory, not the R session's getwd()
+script_dir <- dirname(rstudioapi::getActiveDocumentContext()$path)
+
+# Increase timeout to 2 hours — the T2T-CHM13 genome is ~3 GB
+options(timeout = 7200)
+
+forgeBSgenomeDataPkgFromNCBI(
+  assembly_accession = "GCF_009914755.1",
+  organism = "Homo sapiens",
+  pkg_maintainer = "Stefanus Bernard <s.bernard5@universityofgalway.ie>",
+  circ_seqs = character(0),  # The NCBI RefSeq assembly differs from the submitted assembly in the following ways: Removed chromosome MT
+  destdir = script_dir
+)
+
+install.packages(
+  file.path(script_dir, "BSgenome.Hsapiens.NCBI.T2TCHM13v2.0"),
+  repos = NULL, type = "source"
+)
+
+library(BSgenome.Hsapiens.NCBI.T2TCHM13v2.0)
+
+```
+
+
+
