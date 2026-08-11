@@ -14,25 +14,34 @@ output:
 params:
   # library directory and control guides name
   library_dir: "./public_crispr_library/processed/"
-  sgrna_library: "Jacquere_PerGuideAnnotations_Quota4"
-  terms: ["CONTROL", "Control", "control", "INTRON", "Intron", "intron", "NO_SITE", "ONE_SITE_INTERGENIC"]
+  sgrna_library: "my_library"
+  terms: ["CONTROL", "Control", "control", "INTRON", "NO_SITE"]
   # reference genome and hgnc annotation
-  ref_bsgenome: "BSgenome.Hsapiens.NCBI.T2TCHM13v2.0"
-  ccds_filename_dir: "genome_annotation/T2T-CHM13v2.0_gene_annot_granges.rds"
+  ref_bsgenome: "BSgenome.Hsapiens.UCSC.hg38"
+  ccds_filename_dir: "genome_annotation/CCDS.20221027.txt"
   hgnc_link: "https://storage.googleapis.com/public-download-files/hgnc/tsv/tsv/hgnc_complete_set.txt"
   # alignment file location and criteria
-  guide_aln_granges_genome: "T2T-CHM13v2.0"
-  aln_file_dir: "./object_intermediate/T2T-CHM13_bsgenome/"
-  check_index_file: "T2T-CHM13_BSgenome.1.ebwt"
-  bowtie_index_dir: "bowtie_index/T2T-CHM13_bsgenome/"
-  name_prefix_for_index: "T2T-CHM13_BSgenome"
+  guide_aln_granges_genome: "hg38"
+  aln_file_dir: "./object_intermediate/hg38/"
+  check_index_file: "hg38.1.ebwt"
+  bowtie_index_dir: "bowtie_index/hg38/"
+  name_prefix_for_index: "hg38"
   fasta_file: ""  # path to reference FASTA file; required only when bowtie index has not been built yet
   remove_all_single_mismatch: TRUE
   # output location
   output_dir: "./output_cleaning/"
   output_filename: "output.html"
-  
+
 ---
+
+```{r Require GuideRefine_run.R as entry point, include = FALSE}
+if (Sys.getenv("GUIDEREFINE_ENTRYPOINT") != "GuideRefine_run.R") {
+  stop(
+    "GuideRefine.Rmd must be run via GuideRefine_run.R, not knitted directly.\n",
+    "Run: source(\"GuideRefine_run.R\")  or  Rscript GuideRefine_run.R"
+  )
+}
+```
 
 # Input data and Methods
 
@@ -74,7 +83,6 @@ library(GenomeInfoDb)
 library(params$ref_bsgenome, character.only = TRUE)
 library(GenomicRanges)
 library(stringr)
-library(directlabels)
 library(tidyverse)
 library(knitr)
 library(openxlsx)
