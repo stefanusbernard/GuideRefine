@@ -13,7 +13,7 @@ output:
       
 params:
   # library directory and control guides name
-  library_dir: "./public_crispr_library/"
+  library_dir: "./public_crispr_library/processed/"
   sgrna_library: "Jacquere_PerGuideAnnotations_Quota4"
   terms: ["CONTROL", "Control", "control", "INTRON", "Intron", "intron", "NO_SITE", "ONE_SITE_INTERGENIC"]
   # reference genome and hgnc annotation
