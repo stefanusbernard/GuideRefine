@@ -1,20 +1,13 @@
 ```{r}
 library(tidyverse)
 library(readxl)
-setwd(getwd())
 ```
 
 ## Import jacquere library
 
-
 ```{r}
 
-# The official Jacquere library targets 20,550 genes, of which 99.5% meet the quota of three guides
-# per gene (Supplementary Figure 2a). The library contains 60,617 unique guides, including 900
-# intergenic and 100 non-targeting guides that feature comparable predicted on-target activity 
-
-
-data <- read_csv("./public_crispr_library/Jacquere_PerGuideAnnotations_Quota4.csv")
+data <- read_csv("raw/Jacquere_PerGuideAnnotations_Quota4.csv")
 
 library_table <- data %>%
   select(`sgRNA Sequence`, `Target Gene Symbol`) %>%
@@ -40,7 +33,7 @@ processed_library_table <- library_table %>%
   dplyr::relocate(gene, .after = sequence) %>%
   arrange(gene)
 
-write_tsv(processed_library_table, "./public_crispr_library/Jacquere_PerGuideAnnotations_Quota4.tsv", col_names = FALSE)
+write_tsv(processed_library_table, "processed/Jacquere_PerGuideAnnotations_Quota4.tsv", col_names = FALSE)
 
 ```
 
