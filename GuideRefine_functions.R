@@ -2,6 +2,12 @@ library(tidyverse)
 
 STANDARD_CHROMOSOMES <- paste0("chr", c(1:22, "X", "Y"))
 
+# Filter alignment data to standard chromosomes (chr1-22, chrX, chrY).
+# Mirrors the inline filtering in GuideRefine.Rmd for use in downstream analysis.
+alignment_normal_chr <- function(alignment) {
+  alignment %>% filter(chr %in% STANDARD_CHROMOSOMES | is.na(chr))
+}
+
 #### MAIN FUNCTIONS
 
 # function_df_count
@@ -344,15 +350,4 @@ annotate_pam_positions <- function(alignment_data) {
         relocate(start_pos, .before = cut_pos) %>%
         relocate(end_pos, .after = start_pos) %>%
         relocate(pam_end, .after = pam_start)
-}
-
-#### TEMPORARY FUNCTION
-
-# temporary function to meet the requirement of cut_pos for granges alignments
-add_cut_pos_pam_pos <- function(alignment_data){
-  alignment_data <- annotate_pam_positions(alignment_data) %>%
-    mutate(unique_aln_id = paste0('sgrna_aln_', row_number())) %>%
-    relocate(unique_aln_id, .before = sgRNA)
-
-  return(alignment_data)
 }
