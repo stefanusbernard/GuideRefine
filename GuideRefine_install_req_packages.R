@@ -26,7 +26,6 @@ for (pkg in list_packages_bioconductor) {
 list_packages_cran <- c(
   "rmarkdown",
   "stringr",
-  "directlabels",
   "tidyverse",
   "knitr",
   "openxlsx",
