@@ -1,126 +1,58 @@
 # GuideRefine
 
-A pipeline to remove problematic sgRNAs from genome-wide CRISPR-Cas9 knockout libraries before running a screen analysis (e.g. MAGeCK).
+A pipeline to computationally remove problematic sgRNAs from genome-wide CRISPR-Cas9 knockout libraries before running a screen analysis (e.g. MAGeCK).
 
 GuideRefine aligns every guide to the reference genome and removes guides that:
 - hit more than one genomic locus (**multi-target**)
-- align with a single mismatch anywhere in the 20 nt spacer (**off-target**, default settings ON, optional and can be switch off)
+- align with a single mismatch anywhere in the spacer (**off-target**, on by default, can be switched off)
 - align with a single or double mismatch at the PAM-distal region (**off-target**)
 
-Genes left with fewer than 3 valid guides after filtering are also removed.
+Genes left with fewer than 3 valid guides after filtering are also excluded.
 
-Adapted from [DeKegel & Ryan, 2019](https://pubmed.ncbi.nlm.nih.gov/31652272/).
+Adapted from [DeKegel & Ryan, 2019](https://pubmed.ncbi.nlm.nih.gov/31652272/)
 
 ---
 
-## Requirements
+## Dependencies
 
-- R ≥ 4.2 and Bioconductor ≥ 3.16 (developed and tested on **R v4.5.2**)
-- [Bowtie](https://bowtie-bio.sourceforge.net/) ≥ 1.3 installed and on your `PATH`
+- R ≥ 4.2 and Bioconductor ≥ 3.16 (developed and tested on R v4.5.2)
+- [Bowtie](https://bowtie-bio.sourceforge.net/) ≥ 1.3 on your `PATH`
 
-Install all required R packages by running:
+## Install
 
 ```r
 source("GuideRefine_install_req_packages.R")
 ```
 
-This installs all CRAN and Bioconductor dependencies in one step. No Java required.
+One-time step. Installs all required CRAN and Bioconductor packages, plus Pandoc if missing.
 
----
+## Data to prepare
+
+- **sgRNA library** — TSV, no header, 3 columns (`sgRNA_name  spacer_sequence  gene_symbol`), in `public_crispr_library/processed/`. Avana, Brunello, TKOv3, Yusa and Jacquère are already there — see [public_crispr_library/README.md](public_crispr_library/README.md) to add or reformat your own.
+- **CCDS annotation** — `CCDS.20221027.txt` is already in `genome_annotation/` and works out of the box. For T2T-CHM13 instead of hg38, see [genome_annotation/README.md](genome_annotation/README.md).
+- **Bowtie index** — built automatically on first run: set `fasta_file` in `GuideRefine_run.R` to a genome FASTA, and the pipeline builds the index into `bowtie_index_dir` if it isn't already there. hg38 FASTA: https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/hg38.fa.gz. For T2T-CHM13, see [genome_annotation/README.md](genome_annotation/README.md).
 
 ## How to use
 
-### Step 1 — Install required packages
+1. Open [GuideRefine_run.R](GuideRefine_run.R) and set `sgrna_library` to your library's filename (without `.tsv`).
+2. Run it:
+   ```r
+   source("GuideRefine_run.R")
+   ```
+   or `Rscript GuideRefine_run.R` from a terminal.
 
-Open R or RStudio and run:
+The first run aligns all guides and caches the result in `object_intermediate/`. Later runs on the same library skip alignment automatically — delete the `*_aln.csv` file to force re-alignment.
 
-```r
-source("GuideRefine_install_req_packages.R")
-```
+## Output
 
-This only needs to be done once. It installs all CRAN and Bioconductor packages required by the pipeline.
-
-### Step 2 — Prepare your input library
-
-Your sgRNA library must be a **TSV file with no header** and three columns:
-
-```
-sgRNA_name    spacer_sequence    gene_symbol
-```
-
-Place it in the `public_crispr_library/` folder. Several public libraries (Brunello, Avana, GeckoV2, TKOv3) are already included there.
-
-### Step 3 — Download the CCDS annotation (one-time setup)
-
-Download the latest human CCDS file and save it to `annotation_file/`:
-
-```
-https://ftp.ncbi.nlm.nih.gov/pub/CCDS/current_human/CCDS.current.txt
-```
-
-A copy from 2022 (`CCDS.20221027.txt`) is already included and works out of the box.
-
-### Step 4 — Configure `GuideRefine_run.R`
-
-Open [GuideRefine_run.R](GuideRefine_run.R) and update the highlighted fields:
-
-```r
-my_params <- list(
-
-  output_filename = "my_library",          # <-- name for your output files
-  library_dir     = "./public_crispr_library/",
-  sgrna_library   = "my_library",          # <-- TSV filename (without .tsv)
-
-  # Control/non-targeting guide identifiers in your gene column
-  terms = c("CONTROL", "Control", "control", "INTRON", "NO_SITE"),
-
-  # Reference genome (hg38 — default)
-  ref_bsgenome             = "BSgenome.Hsapiens.UCSC.hg38",
-  ccds_filename_dir        = "annotation_file/CCDS.20221027.txt",
-  guide_aln_granges_genome = "hg38",
-  aln_file_dir             = "./object_intermediate/hg38/",
-  check_index_file         = "hg38.1.ebwt",
-  bowtie_index_dir         = "bowtie_index/hg38/",
-  name_prefix_for_index    = "hg38",
-  fasta_file               = "",  # only needed if rebuilding the Bowtie index from scratch
-
-  # Filtering strictness:
-  # TRUE  = remove guides with a single mismatch anywhere in the spacer (recommended)
-  # FALSE = remove only guides with mismatches at the PAM-distal region
-  remove_all_single_mismatch = TRUE,
-
-  output_dir = "./output_cleaning/"
-)
-```
-
-> **T2T-CHM13 genome:** If you want to align against T2T-CHM13 instead of hg38, run the two notebooks in `annotation_file/` first to build the BSgenome package and CCDS annotation, then swap in the T2T parameter block shown in the comments inside `GuideRefine_run.R`.
-
-### Step 5 — Run the pipeline
-
-```r
-source("GuideRefine_run.R")
-```
-
-Or from the terminal:
-
-```bash
-Rscript GuideRefine_run.R
-```
-
-The first run aligns all guides against the genome and caches the result in `object_intermediate/`. Subsequent runs on the same library skip alignment automatically. To force re-alignment, delete the `*_aln.csv` file for that library.
-
----
-
-## Output files
-
-Results are written to `output_cleaning/`:
+Written to `output_cleaning/`:
 
 | File | Description |
 |------|-------------|
-| `<name>_<date>.html` | HTML report with filtering statistics and QC plots |
+| `<name>_<date>.html` | Report with filtering statistics and QC plots |
 | `<name>_<N>K_refined.tsv` | Cleaned sgRNA library ready for MAGeCK |
 | `<name>_disposed_sgRNAs.tsv` | Removed guides with the reason for each removal |
-| `<name>_full_report.xlsx` | Per-gene guide summary in Excel |
+| `<name>_full_report.xlsx` | Per-gene guide summary |
 
 ---
 
@@ -128,14 +60,17 @@ Results are written to `output_cleaning/`:
 
 ```
 GuideRefine/
-├── GuideRefine_install_req_packages.R  # Run once to install all dependencies
-├── GuideRefine_run.R                   # Configure and run the pipeline
-├── GuideRefine.Rmd                     # Pipeline logic (called automatically by _run.R)
-├── GuideRefine_functions.R             # Helper functions
+├── GuideRefine_install_req_packages.R  # run once to install dependencies
+├── GuideRefine_run.R                   # configure and run the pipeline
+├── GuideRefine.Rmd                     # pipeline logic
+├── GuideRefine_functions.R             # helper functions
 │
-├── annotation_file/           # CCDS and genome annotation files
-├── bowtie_index/              # Pre-built Bowtie index (hg38 and T2T-CHM13)
-├── public_crispr_library/     # Input sgRNA library TSV files
-├── object_intermediate/       # Cached alignment files (auto-generated)
-└── output_cleaning/           # Pipeline outputs (auto-generated)
+├── genome_annotation/         # CCDS / genome annotation (see its README)
+├── public_crispr_library/   # input sgRNA libraries (see its README)
+│   ├── raw/                 # original downloads
+│   └── processed/           # GuideRefine-ready TSVs
+│
+├── bowtie_index/            # Bowtie index (not tracked, build locally)
+├── object_intermediate/     # cached alignments (auto-generated)
+└── output_cleaning/         # pipeline outputs (auto-generated)
 ```
