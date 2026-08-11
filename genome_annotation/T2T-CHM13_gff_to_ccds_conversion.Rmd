@@ -10,44 +10,8 @@ output: html_document
 ```{r setup, include=FALSE}
 
 library(tidyverse)
-library(rtracklayer)
 library(GenomicRanges)
 library(data.table)
-library(ape)
-
-```
-
-# This is how to read CCDS files and convert it to a format where we could see the exon location in each CDS
-
-```{r}
-
-ccds <- read_delim("CCDS.20221027.txt", delim = '\t')
-
-ccds$cds_from <- as.integer(ccds$cds_from)
-ccds$cds_to <- as.integer(ccds$cds_to)
-
-list_chr <- paste0('chr', c(1:22, 'X', 'Y'))
-
-ccds <- ccds %>%
-    dplyr::rename('chr' = '#chromosome') %>%
-    mutate(chr = str_c("chr", chr)) %>%
-    filter(ccds_status %in% c("Public", "Reviewed, update pending", "Under review, update")) %>%
-    filter(chr %in% list_chr, !is.na(cds_from), !is.na(cds_to))
-
-genome_info <- GenomeInfoDb::Seqinfo(genome = "hg38")[list_chr]
-
-ccds_exon <- ccds %>%
-    mutate(cds_interval = str_replace_all(cds_locations, "[\\[\\]]", "") %>% str_split("\\s*,\\s*")) %>%
-    tidyr::unnest(cds_interval) %>%
-    group_by(gene, gene_id, cds_locations) %>%
-    mutate(exon_code = ifelse(cds_strand=="+", 1:dplyr::n(), dplyr::n():1)) %>%
-    ungroup() %>%
-    dplyr::mutate(cds_start = str_extract(cds_interval, "^[0-9]+") %>% as.integer,
-                    cds_end = str_extract(cds_interval, "[0-9]+$") %>% as.integer) %>%
-    dplyr::select(gene, gene_id, chr, start=cds_start, end=cds_end, strand=cds_strand,
-                    gene_start=cds_from, gene_end=cds_to, exon_code)
-
-
 
 ```
 
