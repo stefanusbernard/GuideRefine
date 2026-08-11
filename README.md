@@ -65,12 +65,11 @@ GuideRefine/
 ├── GuideRefine.Rmd                     # pipeline logic
 ├── GuideRefine_functions.R             # helper functions
 │
-├── genome_annotation/         # CCDS / genome annotation (see its README)
-├── public_crispr_library/   # input sgRNA libraries (see its README)
+├── genome_annotation/         # CCDS / genome annotation
+├── public_crispr_library/   # input sgRNA libraries
 │   ├── raw/                 # original downloads
 │   └── processed/           # GuideRefine-ready TSVs
 │
-├── bowtie_index/            # Bowtie index (not tracked, build locally)
 ├── object_intermediate/     # cached alignments (auto-generated)
 └── output_cleaning/         # pipeline outputs (auto-generated)
 ```
