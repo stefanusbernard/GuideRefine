@@ -18,7 +18,7 @@ params:
   terms: ["CONTROL", "Control", "control", "INTRON", "Intron", "intron", "NO_SITE", "ONE_SITE_INTERGENIC"]
   # reference genome and hgnc annotation
   ref_bsgenome: "BSgenome.Hsapiens.NCBI.T2TCHM13v2.0"
-  ccds_filename_dir: "annotation_file/T2T-CHM13v2.0_gene_annot_granges.rds"
+  ccds_filename_dir: "genome_annotation/T2T-CHM13v2.0_gene_annot_granges.rds"
   hgnc_link: "https://storage.googleapis.com/public-download-files/hgnc/tsv/tsv/hgnc_complete_set.txt"
   # alignment file location and criteria
   guide_aln_granges_genome: "T2T-CHM13v2.0"

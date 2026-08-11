@@ -7,7 +7,7 @@ if (!requireNamespace("BiocManager", quietly = TRUE)) {
 
 # Note: BSgenome.Hsapiens.NCBI.T2TCHM13v2.0 (needed only for the optional
 # T2T-CHM13 mode) is not on Bioconductor — it must be forged locally.
-# See annotation_file/README.md.
+# See genome_annotation/README.md.
 list_packages_bioconductor <- c(
   "crisprBase",
   "crisprBowtie",
