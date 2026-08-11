@@ -19,3 +19,9 @@
 ._*
 .RData
 .Rhistory
+
+# public_crispr_library data is tracked intentionally, for transparency/reproducibility
+!/public_crispr_library/**/*.csv
+!/public_crispr_library/**/*.tsv
+!/public_crispr_library/**/*.xlsx
+!/public_crispr_library/**/*.txt
