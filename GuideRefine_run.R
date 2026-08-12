@@ -56,6 +56,8 @@ if (!dir.exists(my_params$output_dir)) {
 date_tag <- format(Sys.Date(), "%Y%m%d")
 output_file <- paste0(my_params$output_dir, my_params$output_filename, "_", date_tag, ".html")
 
+Sys.setenv(GUIDEREFINE_ENTRYPOINT = "GuideRefine_run.R")
+
 rmarkdown::render(
   input = "GuideRefine.Rmd",
   output_file = output_file,
