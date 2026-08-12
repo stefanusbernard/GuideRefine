@@ -103,10 +103,9 @@ sgRNA_library_selected <- params$sgrna_library
 terms <- params$terms
 terms_for_filtering <- paste(terms, collapse = "|")
 
-# change your reference genome here
 ref_bsgenome_selected <- get(params$ref_bsgenome)
 
-# directory for NCBI CCDS data or .RDS file processed from T2T_gff_to_ccds_conversion.Rmd
+# directory for NCBI CCDS data or .RDS file processed from T2T-CHM13_gff_to_ccds_conversion.Rmd
 ccds_filename_dir <- params$ccds_filename_dir
 
 # guide align granges genome (hg38 or T2T-CHM13v2.0)
@@ -167,10 +166,7 @@ if (file_test("-f", paste(aln_file_dir, aln_2_mismatch_filename, sep = "")) == F
       spacers_sequence <- c(unique(sgRNA_library$spacer))
       
       bowtie_index <- file.path(bowtie_index_dir, name_prefix_for_index)
-      
-      # change your reference genome here
-      # seqlevelsStyle(genome) <- "UCSC"
-      
+
       alignment_guides <- runCrisprBowtie(spacers_sequence,
                                            mode = "spacer",
                                            bsgenome = ref_bsgenome_selected,
@@ -212,11 +208,7 @@ track_table <- function_df_count(track_table,
 ```{r Select original gene list and remove any alignment to non standard chromosome, include = FALSE}
 gene_original <- c(unique(library_alignment$gene))
 
-# different notation between NCBI and UCSC genome format (chr and number)`
-
-# genome(ref_bsgenome_selected)
-# seqlevelsStyle(ref_bsgenome_selected)
-
+# different notation between NCBI and UCSC genome format (chr and number)
 seq_style <- seqlevelsStyle(ref_bsgenome_selected)
 
 if ("NCBI" %in% seq_style) {
@@ -442,8 +434,6 @@ if (grepl("\\.txt$", ccds_filename_dir)) {
 library_alignment <- library_alignment %>% 
   mutate(unique_aln_id = paste0("sgrna_aln_", row_number())) %>%
   relocate(unique_aln_id, .before = sgRNA)
-
-# be careful switching between GRCh38 and T2T-CHM13v2.0
 
 # make granges from alignment data
 guide_aln_granges <- make_granges_from_alignment_data(library_alignment, 
