@@ -324,8 +324,8 @@ annotate_pam_positions <- function(alignment_data) {
         mutate(
             pam_start = ifelse(strand == '+', pam_start, pam_start-2),
             pam_end   = ifelse(strand == '+', pam_start+2, pam_start+2),
-            start_pos = ifelse(strand == '+', pam_start-21, pam_start+3),
-            end_pos   = ifelse(strand == '+', pam_start-1, pam_start+23),
+            start_pos = ifelse(strand == '+', pam_start-nchar(spacer), pam_start+3),
+            end_pos   = ifelse(strand == '+', pam_start-1, pam_start+2+nchar(spacer)),
             cut_pos   = ifelse(strand == '+', pam_start-4, pam_start+5)) %>%
         relocate(pam_start, .after = cut_pos) %>%
         relocate(start_pos, .before = cut_pos) %>%
