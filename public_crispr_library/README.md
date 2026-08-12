@@ -9,7 +9,13 @@
 | Brunello | `raw/broadgpp-brunello-library-contents.txt` | `processed/broadgpp-brunello-library-contents.tsv` | `reformat_sgRNA_library.rmd` |
 | TKOv3 | `raw/tkov3_guide_sequence.xlsx` | `processed/tkov3_guide_sequence.tsv` | `reformat_sgRNA_library.rmd` |
 | Yusa / Project Score | `raw/yusa_hcrispr_ko_grnas.xlsx` | `processed/yusa_hcrispr_ko_grnas.tsv` | `reformat_sgRNA_library.rmd` |
-| Jacquère | `raw/Jacquere_PerGuideAnnotations_Quota4.csv` | `processed/Jacquere_PerGuideAnnotations_Quota4.tsv` | `reformat_Jacquere_library.Rmd` |
+| Jacquere | `raw/Jacquere_PerGuideAnnotations_Quota4.csv` | `processed/Jacquere_PerGuideAnnotations_Quota4.tsv` | `reformat_Jacquere_library.Rmd` |
+
+## Scripts
+
+`reformat_sgRNA_library.rmd` modify input sgRNA library to match GuideRefine requirement (sgRNA, spacer, gene), this script also auto-detects the gene-symbol and sequence columns (via HGNC matching and column length) for standard libraries. 
+
+`reformat_Jacquere_library.Rmd` similar as the script above, but additionally resolves Jacquere's multi-gene `GENE1|GENE2` fields into a single gene per guide.
 
 ## Reprocessing / adding a library
 

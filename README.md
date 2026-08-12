@@ -28,7 +28,7 @@ One-time step. Installs all required CRAN and Bioconductor packages, plus Pandoc
 
 ## Data to prepare
 
-- **sgRNA library** — TSV, no header, 3 columns (`sgRNA_name  spacer_sequence  gene_symbol`), in `public_crispr_library/processed/`. Avana, Brunello, TKOv3, Yusa and Jacquère are already there — see [public_crispr_library/README.md](public_crispr_library/README.md) to add or reformat your own.
+- **sgRNA library** — TSV, no header, 3 columns (`sgRNA_name  spacer_sequence  gene_symbol`), in `public_crispr_library/processed/`. Avana, Brunello, TKOv3, Yusa and Jacquere are already there — see [public_crispr_library/README.md](public_crispr_library/README.md) to add or reformat your own.
 - **CCDS annotation** — `CCDS.20221027.txt` is already in `genome_annotation/` and works out of the box. For T2T-CHM13 instead of hg38, see [genome_annotation/README.md](genome_annotation/README.md).
 - **Bowtie index** — built automatically on first run: set `fasta_file` in `GuideRefine_run.R` to a genome FASTA, and the pipeline builds the index into `bowtie_index_dir` if it isn't already there. hg38 FASTA: https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/hg38.fa.gz. For T2T-CHM13, see [genome_annotation/README.md](genome_annotation/README.md).
 
