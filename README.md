@@ -9,7 +9,7 @@ GuideRefine aligns every guide to the reference genome and removes guides that:
 
 Genes left with fewer than 3 valid guides after filtering are also excluded.
 
-Adapted from [DeKegel & Ryan, 2019](https://pubmed.ncbi.nlm.nih.gov/31652272/)
+Guide-filtering criteria adapted from [DeKegel & Ryan, 2019](https://pubmed.ncbi.nlm.nih.gov/31652272/)
 
 ---
 
