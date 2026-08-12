@@ -2,23 +2,16 @@ library(tidyverse)
 
 STANDARD_CHROMOSOMES <- paste0("chr", c(1:22, "X", "Y"))
 
-# Filter alignment data to standard chromosomes (chr1-22, chrX, chrY).
 # Mirrors the inline filtering in GuideRefine.Rmd for use in downstream analysis.
 alignment_normal_chr <- function(alignment) {
   alignment %>% filter(chr %in% STANDARD_CHROMOSOMES | is.na(chr))
 }
 
-#### MAIN FUNCTIONS
-
-# function_df_count
 function_df_count <- function(df_count, count_sgrna, num_genes, num_alignments, notes){
   df_count <- rbind(df_count, c(count_sgrna, num_genes, num_alignments, notes))
   return(df_count)
 }
 
-# FUNCTION TO REMOVE MULTI-TARGET-/OFF-TARGET SGRNAS
-
-# function to remove multi-target sgRNA
 multi_target_sgrna <- function(alignment_data){
     
     # Identify sgRNAs with more than 1 perfect alignment (0 mismatches) anywhere in the genome
@@ -34,12 +27,10 @@ multi_target_sgrna <- function(alignment_data){
         select(sgRNA, gene) %>%
         distinct()
 
-    # Number of dropped sgRNA due to multi-target per gene
     dropped_due_to_multi_target <- multi_target_sgRNAs_count_dropped_guides_per_gene %>%
         count(gene) %>%
         dplyr::rename('multi-target sgRNA' = 'n')
 
-    # List of multi-target sgRNAs
     multi_target_sgRNA_list_guides <- unique(multi_target_sgRNAs$sgRNA)
 
     return(list(
@@ -49,7 +40,6 @@ multi_target_sgrna <- function(alignment_data){
     ))
 }
 
-# function to remove single mismatch sgRNA
 single_mismatch_sgrna <- function(alignment_data) {
     single_mismatch_sgRNA_count_dropped_guides_per_gene <- alignment_data %>%
         filter(n_mismatches == 1) %>%
@@ -74,8 +64,7 @@ single_mismatch_sgrna <- function(alignment_data) {
 pam_distal_mismatch <- function(alignment_data){
   
     annotate_cut_pos <- annotate_pam_positions(alignment_data)
-    
-    
+
     # There is a possibility that a single guide share the pam-distal single mismatch and pam-distal double mismatch
     # that is OK as long as they are detected in either one condition
     
@@ -102,9 +91,7 @@ pam_distal_mismatch <- function(alignment_data){
             )
         ) %>%
         select(-guide_len, -n_mm, -pos1, -pos2)
-    
-    # WARNING: you pull sgRNA using the alignment data, dont forget to use unique() as the number of sgRNA will be duplicated instead
-    
+
     # PAM-distal single mismatches
     pam_distal_single_mismatch <- detect_pam_distal_mismatches %>%
       filter(type == 'pam-distal single mismatch') %>%
@@ -150,105 +137,104 @@ pam_distal_mismatch <- function(alignment_data){
 
 }
 
-# GENE ANNOTATION FOR EACH SGRNA SEQUENCES (1)
+# Parses an NCBI CCDS annotation file into one row per transcript,
+# keeping only actively-maintained records on standard chromosomes.
+read_ccds_data <- function(ccds_filename) {
+    active_status <- c("Public", "Reviewed, update pending", "Under review, update")
 
-# function to read NCBI Coding DNA sequences
-read_ccds_data <- function(ccds_filename){
-    ccds <- read_delim(ccds_filename, delim = '\t')
-
-    ccds$cds_from <- as.integer(ccds$cds_from)
-    ccds$cds_to <- as.integer(ccds$cds_to)
-
-    ccds <- ccds %>%
-        dplyr::rename('chromosome' = '#chromosome') %>%
-        mutate(chromosome = str_c("chr", chromosome)) %>%
-        filter(ccds_status %in% c("Public", "Reviewed, update pending", "Under review, update")) %>%
-        filter(chromosome %in% STANDARD_CHROMOSOMES, !is.na(cds_from), !is.na(cds_to))
-
-    return(ccds)
-
+    readr::read_tsv(ccds_filename, col_types = readr::cols(.default = "c")) %>%
+        dplyr::rename(chromosome = `#chromosome`) %>%
+        dplyr::mutate(
+            chromosome = paste0("chr", chromosome),
+            cds_from = as.integer(cds_from),
+            cds_to = as.integer(cds_to)
+        ) %>%
+        dplyr::filter(
+            chromosome %in% STANDARD_CHROMOSOMES,
+            ccds_status %in% active_status,
+            !is.na(cds_from),
+            !is.na(cds_to)
+        )
 }
 
-# function to transform gene annotation CCDS
-transform_gene_annotation_ccds <- function(imported_ccds_data, chosen_genome){
-    genome_info <- GenomeInfoDb::Seqinfo(genome = chosen_genome)[STANDARD_CHROMOSOMES]
-    
-    ccds_exon <- imported_ccds_data %>%
-        mutate(cds_interval = str_replace_all(cds_locations, "[\\[\\]]", "") %>% str_split("\\s*,\\s*")) %>%
-        tidyr::unnest(cds_interval) %>%
-        group_by(gene, gene_id, cds_locations) %>% 
-        mutate(exon_code = ifelse(cds_strand=="+", 1:dplyr::n(), dplyr::n():1)) %>% 
-        ungroup() %>%
-        dplyr::mutate(cds_start = str_extract(cds_interval, "^[0-9]+") %>% as.integer,
-                        cds_end = str_extract(cds_interval, "[0-9]+$") %>% as.integer) %>%
-        dplyr::select(gene, gene_id, chromosome, start=cds_start, end=cds_end, strand=cds_strand,
-                        gene_start=cds_from, gene_end=cds_to, exon_code)
+# Expands CCDS transcripts into one row per exon (parsed from the
+# "start-end, start-end, ..." cds_locations column) and builds the
+# matching GRanges gene annotation object.
+transform_gene_annotation_ccds <- function(imported_ccds_data, chosen_genome) {
+    exon_table <- imported_ccds_data %>%
+        dplyr::mutate(exon_range = stringr::str_extract_all(cds_locations, "[0-9]+-[0-9]+")) %>%
+        tidyr::unnest(exon_range) %>%
+        tidyr::separate(exon_range, into = c("start", "end"), sep = "-", convert = TRUE) %>%
+        dplyr::group_by(gene, gene_id, cds_locations) %>%
+        dplyr::mutate(
+            exon_code = dplyr::row_number(),
+            exon_code = dplyr::if_else(cds_strand == "-", dplyr::n() - exon_code + 1L, exon_code)
+        ) %>%
+        dplyr::ungroup() %>%
+        dplyr::transmute(
+            gene, gene_id, chromosome, start, end,
+            strand = cds_strand,
+            gene_start = cds_from,
+            gene_end = cds_to,
+            exon_code
+        )
 
-    gene_annot_granges <- ccds_exon %>% 
-        GenomicRanges::makeGRangesFromDataFrame(seqinfo = genome_info, 
-                                                keep.extra.columns = T, 
-                                                na.rm = TRUE)
-    return(list(
-        ccds_exon_df = ccds_exon,
-        gene_annot_granges_df = gene_annot_granges
-    ))
+    seqinfo <- GenomeInfoDb::Seqinfo(genome = chosen_genome)[STANDARD_CHROMOSOMES]
+    gene_annot_granges <- GenomicRanges::makeGRangesFromDataFrame(
+        exon_table, seqinfo = seqinfo, keep.extra.columns = TRUE, na.rm = TRUE
+    )
 
+    list(ccds_exon_df = exon_table, gene_annot_granges_df = gene_annot_granges)
 }
 
-# function to make granges from alignment data
-make_granges_from_alignment_data <- function(alignment_data, ref_bsgenome_selected){
-  
-    if(seqlevelsStyle(ref_bsgenome_selected) == "NCBI") {
-      list_chromosome <- c(1:22, "X", "Y", "MT")
-    } else if (seqlevelsStyle(ref_bsgenome_selected) == "UCSC") {
-      list_chromosome <- paste0("chr", c(1:22, "X", "Y"))
-    }
-  
-    genome_info <- GenomeInfoDb::Seqinfo(genome = unique(genome(ref_bsgenome_selected)))[list_chromosome]
+make_granges_from_alignment_data <- function(alignment_data, ref_bsgenome_selected) {
+    style <- GenomeInfoDb::seqlevelsStyle(ref_bsgenome_selected)
+    chrom_names <- switch(style,
+        NCBI = c(as.character(1:22), "X", "Y", "MT"),
+        UCSC = paste0("chr", c(as.character(1:22), "X", "Y")),
+        stop("Unsupported seqlevels style: ", style)
+    )
+    seqinfo <- GenomeInfoDb::Seqinfo(genome = unique(GenomeInfoDb::genome(ref_bsgenome_selected)))[chrom_names]
 
-    guide_aln_granges <- alignment_data %>%
-        dplyr::select(unique_id = unique_aln_id,
-                id = sgRNA, 
-                Spacer = spacer, 
-                Protospacer = protospacer, 
-                Chr = chr, 
-                Start = cut_pos, 
-                strand, 
-                mismatch = n_mismatches) %>%
-        mutate(End = Start) %>%
-        GenomicRanges::makeGRangesFromDataFrame(seqinfo = genome_info, 
-                                                keep.extra.columns = T,
-                                                na.rm = TRUE)
-    
-    return(guide_aln_granges)
+    alignment_data %>%
+        dplyr::transmute(
+            unique_id = unique_aln_id,
+            id = sgRNA,
+            Spacer = spacer,
+            Protospacer = protospacer,
+            Chr = chr,
+            Start = cut_pos,
+            End = cut_pos,
+            strand,
+            mismatch = n_mismatches
+        ) %>%
+        GenomicRanges::makeGRangesFromDataFrame(seqinfo = seqinfo, keep.extra.columns = TRUE, na.rm = TRUE)
 }
 
-# function to find the overlaps of gene annotation and the alignment
+# Overlaps guide cut-site GRanges with gene-exon GRanges and returns one
+# row per (guide, overlapping exon) pair with both sets of annotations.
 find_overlaps_gene_annotation_and_alignment <- function(guide_aln_granges, gene_annot_granges) {
-   
-    hits <- GenomicRanges::findOverlaps(guide_aln_granges, gene_annot_granges, ignore.strand=T) %>% as_tibble
-    
-    gene_df <- hits %>%
-      transmute(unique_aln_id = guide_aln_granges$unique_id[queryHits] %>% as.character(),
-                sgrna = guide_aln_granges$id[queryHits],
-                spacer = guide_aln_granges$Spacer[queryHits],
-                protospacer = guide_aln_granges$Protospacer[queryHits],
-                mismatches = guide_aln_granges$mismatch[queryHits],
-                chr = GenomicRanges::seqnames(guide_aln_granges)[queryHits] %>% as.character() ,
-                cut_pos = GenomicRanges::start(guide_aln_granges)[queryHits] %>% as.integer(),
-                strand = GenomicRanges::strand(guide_aln_granges)[queryHits] %>% as.character(),
-                gene = gene_annot_granges$gene[subjectHits],
-                CDS_strand = GenomicRanges::strand(gene_annot_granges)[subjectHits] %>% as.character(),
-                CDS_start = GenomicRanges::start(gene_annot_granges)[subjectHits] %>% as.integer(),
-                CDS_end = GenomicRanges::end(gene_annot_granges)[subjectHits] %>% as.integer()) %>%
-      distinct()
+    overlap_hits <- GenomicRanges::findOverlaps(guide_aln_granges, gene_annot_granges, ignore.strand = TRUE)
+    guide_idx <- S4Vectors::queryHits(overlap_hits)
+    gene_idx <- S4Vectors::subjectHits(overlap_hits)
 
-    return(gene_df)
-
+    tibble::tibble(
+        unique_aln_id = as.character(guide_aln_granges$unique_id[guide_idx]),
+        sgrna         = guide_aln_granges$id[guide_idx],
+        spacer        = guide_aln_granges$Spacer[guide_idx],
+        protospacer   = guide_aln_granges$Protospacer[guide_idx],
+        mismatches    = guide_aln_granges$mismatch[guide_idx],
+        chr           = as.character(GenomicRanges::seqnames(guide_aln_granges))[guide_idx],
+        cut_pos       = as.integer(GenomicRanges::start(guide_aln_granges))[guide_idx],
+        strand        = as.character(GenomicRanges::strand(guide_aln_granges))[guide_idx],
+        gene          = gene_annot_granges$gene[gene_idx],
+        CDS_strand    = as.character(GenomicRanges::strand(gene_annot_granges))[gene_idx],
+        CDS_start     = as.integer(GenomicRanges::start(gene_annot_granges))[gene_idx],
+        CDS_end       = as.integer(GenomicRanges::end(gene_annot_granges))[gene_idx]
+    ) %>%
+        dplyr::distinct()
 }
 
-
-# function to visualize the gene symbols 
 
 visualize_gene_symbol <- function(gene_df) {
   
@@ -282,7 +268,6 @@ visualize_gene_symbol <- function(gene_df) {
 
 # function to detect any previous/alias symbol based on the alignment and correct it
 update_gene_symbol <- function(gene_df) {
-  # categorize sgRNA with gene symbol match and sgRNA with gene symbol mismatch
   gene_df_check <- gene_df %>%
     filter(mismatches == 0) %>%
     mutate(notes = case_when(str_extract(sgrna, "(?<=sg)([A-Za-z0-9-]+)") == gene ~ "symbol match",
@@ -302,7 +287,6 @@ update_gene_symbol <- function(gene_df) {
     arrange(gene) %>%
     filter(!duplicate_spacer_gene == TRUE)
   
-  # arrange sequential numbers here
   run_length <- rle(gene_df_mismatch$gene)$lengths
   sequential_numbers <- sequence(run_length)
   
@@ -314,7 +298,6 @@ update_gene_symbol <- function(gene_df) {
     relocate(sgrna, .before = spacer) %>%
     mutate(notes = "symbol corrected")
   
-  # find corrected genes that already exist in gene_df_match put it into a new dataframe called as corrected_exist_gene
   list_corrected_exist_gene <- intersect(gene_df_match$gene, gene_df_mismatch$gene)
   corrected_exist_gene <- gene_df_match %>%
     filter(gene %in% list_corrected_exist_gene)
@@ -323,13 +306,11 @@ update_gene_symbol <- function(gene_df) {
   gene_df_match <- gene_df_match %>%
     filter(!gene %in% list_corrected_exist_gene)
   
-  # join gene_df_mismatch with gene_df_match to find the duplicated sgRNA
   gene_df_mismatch <- gene_df_mismatch %>%
     full_join(corrected_exist_gene, by = names(corrected_exist_gene)) %>%
     arrange(gene, desc(notes)) %>%
     mutate(duplicate_spacer_gene = duplicated(data.frame(spacer, gene)))
   
-  # full_join the gene_df_mismatch with gene_df_match to become a gene_df_corrected
   gene_df_corrected <- gene_df_match %>%
     full_join(gene_df_mismatch, by = names(gene_df_mismatch))
   
