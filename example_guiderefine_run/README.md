@@ -54,7 +54,7 @@ The `output/` folder shows what GuideRefine produced for this Brunello run:
 
 | File | Description |
 |------|-------------|
-| `broadgpp-brunello-library-contents_20260730.html` | Report with filtering statistics and QC plots |
-| `broadgpp-brunello-library-contents_62K_refined.tsv` | Cleaned sgRNA library ready for MAGeCK |
-| `broadgpp-brunello-library-contents_disposed_sgRNAs.tsv` | Removed guides with the reason for each removal |
+| `broadgpp-brunello-library-contents_20260730.html` | sgRNA library cleaning HTML report |
+| `broadgpp-brunello-library-contents_62K_refined.tsv` | Refined sgRNA library ready for downstream analysis; e.g MAGeCK |
+| `broadgpp-brunello-library-contents_disposed_sgRNAs.tsv` | Removed sgRNAs with the reason for each removal |
 | `broadgpp-brunello-library-contents_full_report.xlsx` | Per-gene guide summary |
