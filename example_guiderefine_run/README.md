@@ -43,10 +43,7 @@ sgA1CF_1	ACAGGAAGAATTCAGTTATG	A1CF
   length, and writes a 3-column TSV to `processed/`. Rows with a missing gene symbol are
   dropped automatically.
 - **Or write your own script/reformat by hand** — as long as the result is a headerless,
-  3-column TSV (`sgRNA`, `spacer`, `gene`), GuideRefine doesn't care how you got there.
-  For non-standard raw formats (e.g. multi-gene-per-row fields), you'll need a dedicated
-  script — see the archived `reformat_Jacquere_library.Rmd` example in this repo's git
-  history for a case that resolves `GENE1|GENE2`-style fields.
+  3-column TSV (`sgRNA`, `spacer`, `gene`)
 
 Once you have your processed TSV, point `GuideRefine_run.R` at it:
 `library_dir = "./example_guiderefine_run/processed/"`, `sgrna_library = "<filename without .tsv>"`.
