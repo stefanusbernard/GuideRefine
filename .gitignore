@@ -20,8 +20,9 @@
 .RData
 .Rhistory
 
-# public_crispr_library data is tracked intentionally, for transparency/reproducibility
-!/public_crispr_library/**/*.csv
-!/public_crispr_library/**/*.tsv
-!/public_crispr_library/**/*.xlsx
-!/public_crispr_library/**/*.txt
+# example_guiderefine_run data is tracked intentionally, for transparency/reproducibility
+!/example_guiderefine_run/**/*.csv
+!/example_guiderefine_run/**/*.tsv
+!/example_guiderefine_run/**/*.xlsx
+!/example_guiderefine_run/**/*.txt
+!/example_guiderefine_run/**/*.html
