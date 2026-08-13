@@ -28,7 +28,7 @@ One-time step. Installs all required CRAN and Bioconductor packages, plus Pandoc
 
 ## Data to prepare
 
-- **sgRNA library** — TSV, no header, 3 columns (`sgRNA_name  spacer_sequence  gene_symbol`), in `public_crispr_library/processed/`. Avana, Brunello, TKOv3, Yusa and Jacquere are already there — see [public_crispr_library/README.md](public_crispr_library/README.md) to add or reformat your own.
+- **sgRNA library** — TSV, no header, 3 columns (`sgRNA_name  spacer_sequence  gene_symbol`). See [example_guiderefine_run/README.md](example_guiderefine_run/README.md) for a worked example (Brunello) and how to reformat your own library into this format.
 - **CCDS annotation** — `CCDS.20221027.txt` is already in `genome_annotation/` and works out of the box. For T2T-CHM13 instead of hg38, see [genome_annotation/README.md](genome_annotation/README.md).
 - **Bowtie index** — built automatically on first run: set `fasta_file` in `GuideRefine_run.R` to a genome FASTA, and the pipeline builds the index into `bowtie_index_dir` if it isn't already there. hg38 FASTA: https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/hg38.fa.gz. For T2T-CHM13, see [genome_annotation/README.md](genome_annotation/README.md).
 
@@ -66,9 +66,10 @@ GuideRefine/
 ├── GuideRefine_functions.R             # helper functions
 │
 ├── genome_annotation/         # CCDS / genome annotation
-├── public_crispr_library/   # input sgRNA libraries
-│   ├── raw/                 # original downloads
-│   └── processed/           # GuideRefine-ready TSVs
+├── example_guiderefine_run/ # worked example: raw + processed Brunello library, reformat script, sample output
+│   ├── raw/                 # original download
+│   ├── processed/           # GuideRefine-ready TSV
+│   └── output/              # sample GuideRefine output
 │
 ├── object_intermediate/     # cached alignments (auto-generated)
 └── output_cleaning/         # pipeline outputs (auto-generated)
