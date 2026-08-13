@@ -9,7 +9,7 @@ if (!rmarkdown::pandoc_available()) {
 
 my_params <- list(
   output_filename = "my_library",
-  library_dir     = "./public_crispr_library/processed/",
+  library_dir     = "./example_guiderefine_run/processed/",
   sgrna_library   = "my_library",
   terms = c("CONTROL", "Control", "control", "INTRON", "NO_SITE"),
 
@@ -32,7 +32,7 @@ my_params <- list(
 #
 # my_params <- list(
 #   output_filename = "my_library",
-#   library_dir     = "./public_crispr_library/processed/",
+#   library_dir     = "./example_guiderefine_run/processed/",
 #   sgrna_library   = "my_library",
 #   terms = c("CONTROL", "Control", "control", "INTRON", "NO_SITE"),
 #   ref_bsgenome             = "BSgenome.Hsapiens.NCBI.T2TCHM13v2.0",

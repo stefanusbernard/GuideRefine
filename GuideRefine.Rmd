@@ -13,7 +13,7 @@ output:
       
 params:
   # library directory and control guides name
-  library_dir: "./public_crispr_library/processed/"
+  library_dir: "./example_guiderefine_run/processed/"
   sgrna_library: "my_library"
   terms: ["CONTROL", "Control", "control", "INTRON", "NO_SITE"]
   # reference genome and hgnc annotation
