@@ -1,0 +1,3 @@
+# Exclude knitted/generated example output from GitHub language stats
+example_guiderefine_run/output/** linguist-generated
+*.html linguist-generated
